@@ -171,6 +171,7 @@ button:active{filter:brightness(1.35)}
       <div id="uDl" style="display:none;flex-direction:column;gap:6px"><div class="bar"><div id="uBar"></div></div><span style="font-size:12px;color:var(--l2)" id="uP">กำลังดาวน์โหลด 0%</span></div>
       <div id="uBtns" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn" id="uLater">ไว้ก่อน</button><button class="btn pri" id="uGo">อัปเดตเลย</button></div>
       <button class="btn ok" id="uInst" style="display:none">ติดตั้งทับเลย</button>
+      <button class="link" id="uWeb" style="height:34px;text-align:center;font-size:13px;padding:0">ติดตั้งไม่ผ่าน / เครื่องถาม PIN? ดาวน์โหลดผ่านเบราว์เซอร์</button>
     </div>
   </div>
 
@@ -423,7 +424,7 @@ function closeUp(){$("ovUp").classList.remove("on")}
 function upView(){$("uDl").style.display=U.phase==="dl"?"flex":"none";$("uBtns").style.display=U.phase==="idle"?"grid":"none";$("uInst").style.display=U.phase==="ready"?"flex":"none";if(U.phase==="ready")$("uT").textContent="ดาวน์โหลดเสร็จแล้ว"}
 window.ddtUpdateProgress=function(p){U.phase="dl";$("uBar").style.width=p+"%";$("uP").textContent="กำลังดาวน์โหลด "+p+"%";upView()};
 window.ddtUpdateDone=function(ok,msg){if(ok){U.phase="ready"}else{U.phase="idle";toast(msg||"ดาวน์โหลดไม่สำเร็จ")}upView()};
-window.ddtInstallMsg=function(msg){toast(msg,5000)};
+window.ddtInstallMsg=function(msg){toast(msg+" · ถ้าไม่ผ่าน กด ‘ดาวน์โหลดผ่านเบราว์เซอร์’",6000)};
 
 /* ---------- wiring ---------- */
 buildStatic();
@@ -453,6 +454,8 @@ $("ubarB").onclick=openUp;
 $("uLater").onclick=function(){if(U.info)lsSet("ddt_skipver",+U.info.versionCode);closeUp()};
 $("uGo").onclick=function(){if(!HOST)return;U.phase="dl";upView();HOST.downloadUpdate(U.info.apk)};
 $("uInst").onclick=function(){if(HOST)HOST.installUpdate()};
+$("uWeb").onclick=function(){var u=U.info&&U.info.apk||"https://github.com/ONISAN1999/ddt-aim/releases/latest/download/ddt-aim.apk";
+  if(HOST&&HOST.openUrl){HOST.openUrl(u);toast("เปิดเบราว์เซอร์แล้ว: รอดาวน์โหลดเสร็จ แตะไฟล์แล้วกดติดตั้ง",5000)}else location.href=u};
 if(BUBBLE){document.body.classList.add("bubble");$("bClose").style.display="flex";if(HOST)$("bClose").style.visibility="hidden";$("bClose").onclick=function(){if(HOST&&HOST.close)HOST.close()};$("bShot2").textContent="จับภาพจอสด"}
 else{$("mEmptyT").textContent="เลือกรูปแคปหน้าจอเกม หรือเปิด Bubble แล้วกดแคปจอระหว่างเล่น";$("bShot2").textContent="เลือกรูป";$("bShot").textContent="เลือกรูป";
   if(HOST&&HOST.toggleBubble){$("bBubble").style.display="flex";$("bBubble").onclick=function(){HOST.toggleBubble()}}}

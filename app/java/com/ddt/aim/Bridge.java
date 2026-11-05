@@ -63,6 +63,18 @@ public class Bridge {
     public void installUpdate() { Updater.install(ctx, web); }
 
     @JavascriptInterface
+    public void openUrl(final String url) {
+        onUi(new Runnable() {
+            public void run() {
+                android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url));
+                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(i);
+                if (host != null) host.close();
+            }
+        });
+    }
+
+    @JavascriptInterface
     public String lastError() { return CrashLog.read(); }
 
     @JavascriptInterface
