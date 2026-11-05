@@ -133,8 +133,8 @@ public class MainActivity extends Activity implements Bridge.Host {
         // foreground service can then start with a valid media-projection token
         try {
             MediaProjectionManager m = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
-            Toast.makeText(this, "อนุญาตการจับภาพหน้าจอ เพื่อใช้เลือกจากแผนที่แบบจอสด", Toast.LENGTH_SHORT).show();
-            startActivityForResult(m.createScreenCaptureIntent(), REQ_CAP);
+            Toast.makeText(this, "อนุญาตการจับภาพ “ทั้งหน้าจอ” เพื่อใช้เลือกจากแผนที่แบบจอสด", Toast.LENGTH_LONG).show();
+            startActivityForResult(ScreenCapActivity.captureIntent(m), REQ_CAP);
         } catch (Throwable t) {
             CrashLog.note("capIntent", t);
             startBubble(null, RESULT_CANCELED);

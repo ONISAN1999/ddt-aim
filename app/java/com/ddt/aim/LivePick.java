@@ -21,6 +21,7 @@ public class LivePick extends View {
     public interface Cb {
         void done(float fw, float sx, float sy, float tx, float ty, int screenW);
         void cancel();
+        void reauth();
     }
 
     private static final String[] LBL = {
@@ -42,7 +43,9 @@ public class LivePick extends View {
 
     private final Object lock = new Object();
     private Bitmap frame;
-    private long frameTime, touchStart;
+    private long frameTime, touchStart, shownAt;
+    private boolean black;
+    private final RectF bReauth = new RectF();
     private int[] px = new int[0];
 
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -64,10 +67,18 @@ public class LivePick extends View {
         stroke.setStyle(Paint.Style.STROKE);
         text.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         pix.setFilterBitmap(false);
+        shownAt = android.os.SystemClock.uptimeMillis();
+        postDelayed(new Runnable() { public void run() { invalidate(); } }, 1700);
     }
 
-    public void setFrame(Bitmap b, long t) {
-        synchronized (lock) { frame = b; frameTime = t; }
+    private boolean noImage() {
+        synchronized (lock) {
+            return black || (frame == null && android.os.SystemClock.uptimeMillis() - shownAt > 1500);
+        }
+    }
+
+    public void setFrame(Bitmap b, long t, boolean isBlack) {
+        synchronized (lock) { frame = b; frameTime = t; black = isBlack; }
         postInvalidate();
     }
 
@@ -151,6 +162,7 @@ public class LivePick extends View {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 if (bCancel.contains(x, y)) { onButton = true; cb.cancel(); return true; }
+                if (!bReauth.isEmpty() && bReauth.contains(x, y)) { onButton = true; cb.reauth(); return true; }
                 if (bUndo.contains(x, y)) { onButton = true; undo(); return true; }
                 if (useMem && bReframe.contains(x, y)) { onButton = true; reframe(); return true; }
                 onButton = false;
@@ -231,6 +243,27 @@ public class LivePick extends View {
 
         if (touching) loupe(c, fx - loc[0]);
         hud(c, w, h);
+        warn(c, w, h);
+    }
+
+    /** Shown when the capture gives no picture: usually a single-app share or a stopped projection. */
+    private void warn(Canvas c, int w, int h) {
+        if (!noImage()) { bReauth.setEmpty(); return; }
+        float bw = Math.min(w - 40 * d, 460 * d), bh = 112 * d, l = (w - bw) / 2, t = h * 0.22f;
+        RectF box = new RectF(l, t, l + bw, t + bh);
+        fill.setColor(0xF22C2C2E);
+        c.drawRoundRect(box, 16 * d, 16 * d, fill);
+        text.setTextAlign(Paint.Align.LEFT);
+        text.setColor(0xFFFF9F0A);
+        text.setTextSize(14 * d);
+        c.drawText("ไม่ได้รับภาพหน้าจอ (แว่นขยายดำ)", l + 16 * d, t + 26 * d, text);
+        text.setColor(0xFFEBEBF5);
+        text.setTextSize(12 * d);
+        c.drawText("กด ‘ขอสิทธิ์ใหม่’ แล้วเลือก “ทั้งหน้าจอ” (ไม่ใช่แอปเดียว)", l + 16 * d, t + 48 * d, text);
+        float rw = 140 * d, rh = 38 * d;
+        bReauth.set(l + 16 * d, t + bh - rh - 12 * d, l + 16 * d + rw, t + bh - 12 * d);
+        btn(c, bReauth, "ขอสิทธิ์ใหม่", 0xFF0A84FF);
+        if (!black) postInvalidateDelayed(500);
     }
 
     private void marker(Canvas c, float x, float y, int i) {

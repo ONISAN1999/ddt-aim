@@ -87,6 +87,17 @@ public class BubbleService extends Service implements Bridge.Host {
     private Bitmap[] bufs = new Bitmap[2];
     private int bufIdx = 0;
     private long lastFrame = 0;
+    private ByteBuffer pad;
+
+    private static boolean isBlack(Bitmap b, int w, int h) {
+        int lit = 0, n = 0;
+        for (int gy = 1; gy < 10; gy++) for (int gx = 1; gx < 17; gx++) {
+            int p = b.getPixel(w * gx / 17, h * gy / 10);
+            n++;
+            if (((p >> 16) & 255) > 18 || ((p >> 8) & 255) > 18 || (p & 255) > 18) lit++;
+        }
+        return lit < n / 20;
+    }
 
     // ---------- small views ----------
     private class Panel extends FrameLayout {
@@ -605,6 +616,13 @@ public class BubbleService extends Service implements Bridge.Host {
                 endPick("ddtPickDone(" + fw + "," + sx + "," + sy + "," + tx + "," + ty + "," + sw + ")");
             }
             public void cancel() { endPick(null); }
+            public void reauth() {
+                final boolean h = pickToHud;
+                endPick(null);
+                if (proj != null) { try { proj.stop(); } catch (Exception ignored) { } }
+                proj = null;
+                requestPick(fwr, h);
+            }
         });
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(-1, -1, overlayType(),
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
@@ -635,9 +653,18 @@ public class BubbleService extends Service implements Bridge.Host {
                 bufs[bufIdx] = b;
             }
             buf.rewind();
+            int need = b.getRowBytes() * h;
+            if (buf.remaining() < need) {          // last row is not padded on some devices
+                if (pad == null || pad.capacity() != need) pad = ByteBuffer.allocateDirect(need);
+                pad.clear();
+                pad.put(buf);
+                while (pad.position() < need) pad.put((byte) 0);
+                pad.flip();
+                buf = pad;
+            }
             synchronized (p.lock()) { b.copyPixelsFromBuffer(buf); }
             bufIdx ^= 1;
-            p.setFrame(b, now);
+            p.setFrame(b, now, isBlack(b, w, h));
         } catch (Throwable t) {
             CrashLog.note("frame", t);
         } finally {

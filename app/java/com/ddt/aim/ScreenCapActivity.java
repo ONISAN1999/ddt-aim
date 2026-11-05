@@ -4,18 +4,28 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.media.projection.MediaProjectionManager;
+import android.os.Build;
 import android.os.Bundle;
 
 /** Invisible activity that asks for screen-capture permission and hands the result to BubbleService. */
 public class ScreenCapActivity extends Activity {
     private static final int REQ = 7777;
 
+    /** Android 14+: ask for the whole screen (a single-app share gives black frames over the game). */
+    static Intent captureIntent(MediaProjectionManager m) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            try { return m.createScreenCaptureIntent(android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay()); }
+            catch (Throwable t) { CrashLog.note("capConfig", t); }
+        }
+        return m.createScreenCaptureIntent();
+    }
+
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         MediaProjectionManager m = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
         try {
-            startActivityForResult(m.createScreenCaptureIntent(), REQ);
+            startActivityForResult(captureIntent(m), REQ);
         } catch (Exception e) {
             send(RESULT_CANCELED, null);
         }
