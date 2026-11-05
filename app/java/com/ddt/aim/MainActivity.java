@@ -36,6 +36,7 @@ public class MainActivity extends Activity implements Bridge.Host {
         setContentView(root);
         immersive();
         initWeb();
+        handleAction(getIntent());
     }
 
     @SuppressWarnings("deprecation")
@@ -171,6 +172,43 @@ public class MainActivity extends Activity implements Bridge.Host {
 
     @Override
     public void openPanel() { }
+
+    private boolean installing = false;
+    private long installAt = 0;
+
+    /** Portrait while the system installer asks for fingerprint / PIN; landscape again when we come back. */
+    @Override
+    public void install() {
+        installing = true;
+        installAt = android.os.SystemClock.uptimeMillis();
+        setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        Toast.makeText(this, "หมุนเป็นแนวตั้งเพื่อสแกนลายนิ้วมือ แล้วกดติดตั้ง", Toast.LENGTH_LONG).show();
+        final android.app.Activity self = this;
+        web.postDelayed(new Runnable() { public void run() { Updater.install(self, web); } }, 450);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (installing && android.os.SystemClock.uptimeMillis() - installAt > 1500) {
+            installing = false;
+            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent i) {
+        super.onNewIntent(i);
+        setIntent(i);
+        handleAction(i);
+    }
+
+    private void handleAction(Intent i) {
+        if (i != null && "ddt.install".equals(i.getAction())) {
+            i.setAction(null);
+            web.postDelayed(new Runnable() { public void run() { install(); } }, 300);
+        }
+    }
 
     @Override
     protected void onDestroy() {

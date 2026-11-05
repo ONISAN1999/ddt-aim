@@ -13,6 +13,8 @@ public class Bridge {
         void capture();
         void pickLive(float fwr);
         void openPanel();
+        /** Install the downloaded update (the main screen turns portrait for the fingerprint prompt). */
+        void install();
     }
 
     private final Context ctx;
@@ -61,7 +63,10 @@ public class Bridge {
     public void downloadUpdate(String url) { Updater.download(ctx, web, url); }
 
     @JavascriptInterface
-    public void installUpdate() { Updater.install(ctx, web); }
+    public void installUpdate() {
+        if (host == null) { Updater.install(ctx, web); return; }
+        onUi(new Runnable() { public void run() { host.install(); } });
+    }
 
     @JavascriptInterface
     public void openUrl(final String url) {

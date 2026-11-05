@@ -420,6 +420,7 @@ public class BubbleService extends Service implements Bridge.Host {
             public void capture() { onBallTap(); }
             public void pickLive(float fwr) { onBallTap(); }
             public void openPanel() { try { expand(); } catch (Throwable t) { CrashLog.note("expand", t); collapse(); } }
+            public void install() { installViaMain(); }
         }), "DDT");
         hudWeb.setWebViewClient(new WebViewClient() {
             @Override
@@ -563,6 +564,17 @@ public class BubbleService extends Service implements Bridge.Host {
 
     @Override
     public void openPanel() { }
+
+    @Override
+    public void install() { installViaMain(); }
+
+    /** The overlay cannot rotate the screen: hand the install to the main screen, which turns portrait. */
+    private void installViaMain() {
+        collapse();
+        Intent i = new Intent(this, MainActivity.class).setAction("ddt.install");
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(i);
+    }
 
     // ---------- live map pick ----------
     /** From the full panel's map tab: result goes back to the panel. */
