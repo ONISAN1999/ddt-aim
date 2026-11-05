@@ -185,6 +185,10 @@ button:active{filter:brightness(1.35)}
       <div class="list">
         <button class="link" id="sFrame" style="color:#fff">ล้างกรอบแผนที่ที่จำไว้</button>
       </div>
+      <div class="list" id="sErrBox" style="display:none;padding:10px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--orange)">ข้อผิดพลาดล่าสุด (ส่งให้ผู้พัฒนาได้)</span><button class="link" id="sErrClr" style="width:auto;height:28px;padding:0;font-size:13px">ล้าง</button></div>
+        <pre id="sErr" style="margin:6px 0 0;max-height:70px;overflow:auto;font-size:10px;line-height:1.35;color:var(--l2);white-space:pre-wrap;user-select:text;-webkit-user-select:text"></pre>
+      </div>
       <button class="btn" id="sClose" style="align-self:flex-end;width:120px">เสร็จ</button>
     </div>
   </div>
@@ -402,12 +406,12 @@ document.addEventListener("click",function(e){
 });
 $("fDist").onclick=function(){S.field="dist";render()};$("fH").onclick=function(){S.field="h";render()};
 $("wL").onclick=function(){S.wDir=-1;render()};$("wR").onclick=function(){S.wDir=1;render()};
-$("tCalc").onclick=function(){setTab("calc")};$("tMap").onclick=function(){setTab("map")};
+$("tCalc").onclick=function(){setTab("calc")};$("tMap").onclick=function(){if(BUBBLE&&HOST&&HOST.pickLive){HOST.pickLive(String(M.fwr||0))}else setTab("map")};
 $("bShot").onclick=capture;$("bShot2").onclick=capture;
 $("zIn").onclick=function(){var v=vpSize();zoomAt(1.6,v.w/2,v.h/2)};$("zOut").onclick=function(){var v=vpSize();zoomAt(1/1.6,v.w/2,v.h/2)};
 $("bUse").onclick=function(){var r=mapResult();if(!r){toast("วางจุดให้ครบก่อน: กรอบจอ · ตัวเรา · เป้าหมาย");return}
   S.dist=(Math.abs(r.dx)/100).toFixed(1);S.dir=r.dx>=0?1:-1;S.h=String(Math.round(Math.abs(r.dy)));S.hSign=r.dy>=0?1:-1;S.field="dist";setTab("calc");render()};
-$("bSet").onclick=function(){$("sVer").textContent="เวอร์ชัน "+curName();$("sAuto").classList.toggle("on",U.auto);$("ovSet").classList.add("on")};
+$("bSet").onclick=function(){$("sVer").textContent="เวอร์ชัน "+curName();showErr();$("sAuto").classList.toggle("on",U.auto);$("ovSet").classList.add("on")};
 $("sClose").onclick=function(){$("ovSet").classList.remove("on")};
 $("sAuto").onclick=function(){U.auto=!U.auto;lsSet("ddt_auto",U.auto);this.classList.toggle("on",U.auto)};
 $("sCheck").onclick=function(){$("ovSet").classList.remove("on");checkUpdate(true)};
@@ -416,10 +420,22 @@ $("ubarB").onclick=openUp;
 $("uLater").onclick=function(){if(U.info)lsSet("ddt_skipver",+U.info.versionCode);closeUp()};
 $("uGo").onclick=function(){if(!HOST)return;U.phase="dl";upView();HOST.downloadUpdate(U.info.apk)};
 $("uInst").onclick=function(){if(HOST)HOST.installUpdate()};
-if(BUBBLE){document.body.classList.add("bubble");$("bClose").style.display="flex";$("bClose").onclick=function(){if(HOST&&HOST.close)HOST.close()};$("bShot2").textContent="แคปจอเกม"}
+if(BUBBLE){document.body.classList.add("bubble");$("bClose").style.display="flex";if(HOST)$("bClose").style.visibility="hidden";$("bClose").onclick=function(){if(HOST&&HOST.close)HOST.close()};$("bShot2").textContent="จับภาพจอสด"}
 else{$("mEmptyT").textContent="เลือกรูปแคปหน้าจอเกม หรือเปิด Bubble แล้วกดแคปจอระหว่างเล่น";$("bShot2").textContent="เลือกรูป";$("bShot").textContent="เลือกรูป";
   if(HOST&&HOST.toggleBubble){$("bBubble").style.display="flex";$("bBubble").onclick=function(){HOST.toggleBubble()}}}
+function lastErr(){try{return HOST&&HOST.lastError?HOST.lastError():""}catch(e){return ""}}
+function showErr(){var t=lastErr();$("sErrBox").style.display=t?"block":"none";$("sErr").textContent=t}
+$("sErrClr").onclick=function(){try{HOST.clearError()}catch(e){}showErr()};
+/* ผลจากโหมดแผนที่จอสด (Bubble): fw = ความกว้างกรอบจอเป็น px จอจริง, จุดเป็นพิกัดจอ */
+window.ddtPickDone=function(fw,sx,sy,tx,ty,sw){
+  if(!(fw>3))return;M.fwr=fw/sw;lsSet("ddt_fwr",M.fwr);
+  var k=1000/fw,dx=(tx-sx)*k,dy=(sy-ty)*k;
+  S.dist=(Math.abs(dx)/100).toFixed(1);S.dir=dx>=0?1:-1;S.h=String(Math.round(Math.abs(dy)));S.hSign=dy>=0?1:-1;S.field="dist";
+  setTab("calc");render();
+  toast("ระยะ "+S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · ต่างระดับ "+(S.hSign>0?"+":"−")+S.h+" px",2600);
+};
 render();
+if(!BUBBLE&&lastErr())setTimeout(function(){toast("แอปเคยเกิดข้อผิดพลาด ดูรายละเอียดใน ตั้งค่า (เฟือง)",4000)},600);
 if(!BUBBLE&&U.auto)setTimeout(function(){checkUpdate(false)},1200);
 </script>
 </body>

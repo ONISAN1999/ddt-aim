@@ -3,6 +3,7 @@ package com.ddt.aim;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
+import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -20,6 +21,7 @@ import android.widget.Toast;
 
 public class MainActivity extends Activity implements Bridge.Host {
     private static final int REQ_FILE = 5555;
+    private static final int REQ_CAP = 7778;
     private FrameLayout root;
     private WebView web;
     private ValueCallback<Uri[]> fileCb;
@@ -27,6 +29,7 @@ public class MainActivity extends Activity implements Bridge.Host {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        CrashLog.install(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
@@ -90,6 +93,10 @@ public class MainActivity extends Activity implements Bridge.Host {
 
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
+        if (req == REQ_CAP) {
+            startBubble(res == RESULT_OK ? data : null, res);
+            return;
+        }
         if (req == REQ_FILE && fileCb != null) {
             Uri[] r = null;
             if (res == RESULT_OK && data != null && data.getData() != null) r = new Uri[]{data.getData()};
@@ -122,10 +129,35 @@ public class MainActivity extends Activity implements Bridge.Host {
             startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
             return;
         }
-        Intent i = new Intent(this, BubbleService.class);
-        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
-        Toast.makeText(this, "เปิด Bubble แล้ว สลับไปที่เกมได้เลย", Toast.LENGTH_SHORT).show();
-        moveTaskToBack(true);
+        // ask for screen capture first: the live map picker needs it, and the
+        // foreground service can then start with a valid media-projection token
+        try {
+            MediaProjectionManager m = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+            Toast.makeText(this, "อนุญาตการจับภาพหน้าจอ เพื่อใช้เลือกจากแผนที่แบบจอสด", Toast.LENGTH_SHORT).show();
+            startActivityForResult(m.createScreenCaptureIntent(), REQ_CAP);
+        } catch (Throwable t) {
+            CrashLog.note("capIntent", t);
+            startBubble(null, RESULT_CANCELED);
+        }
+    }
+
+    private void startBubble(Intent capData, int code) {
+        try {
+            Intent i = new Intent(this, BubbleService.class).setAction("start");
+            if (capData != null) {
+                i.putExtra("code", code);
+                i.putExtra("data", capData);
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(i); else startService(i);
+            } else {
+                startService(i);
+                Toast.makeText(this, "ไม่ได้อนุญาตจับภาพจอ: ใช้กดเลขได้ ส่วนแผนที่จะขอสิทธิ์อีกครั้งตอนกด", Toast.LENGTH_LONG).show();
+            }
+            Toast.makeText(this, "เปิด Bubble แล้ว สลับไปที่เกมได้เลย", Toast.LENGTH_SHORT).show();
+            moveTaskToBack(true);
+        } catch (Throwable t) {
+            CrashLog.note("startBubble", t);
+            Toast.makeText(this, "เปิด Bubble ไม่สำเร็จ: " + t.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     @Override
@@ -133,6 +165,9 @@ public class MainActivity extends Activity implements Bridge.Host {
 
     @Override
     public void capture() { }
+
+    @Override
+    public void pickLive(float fwr) { }
 
     @Override
     protected void onDestroy() {

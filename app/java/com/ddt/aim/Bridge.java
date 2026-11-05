@@ -11,6 +11,7 @@ public class Bridge {
         void toggleBubble();
         void close();
         void capture();
+        void pickLive(float fwr);
     }
 
     private final Context ctx;
@@ -31,6 +32,14 @@ public class Bridge {
         }
     }
 
+    private void onUi(final Runnable r) {
+        web.post(new Runnable() {
+            public void run() {
+                try { r.run(); } catch (Throwable t) { CrashLog.note("bridge", t); }
+            }
+        });
+    }
+
     @JavascriptInterface
     public String version() {
         PackageInfo p = info();
@@ -45,32 +54,41 @@ public class Bridge {
     }
 
     @JavascriptInterface
-    public void checkUpdate() {
-        Updater.check(web);
-    }
+    public void checkUpdate() { Updater.check(web); }
 
     @JavascriptInterface
-    public void downloadUpdate(String url) {
-        Updater.download(ctx, web, url);
-    }
+    public void downloadUpdate(String url) { Updater.download(ctx, web, url); }
 
     @JavascriptInterface
-    public void installUpdate() {
-        Updater.install(ctx, web);
-    }
+    public void installUpdate() { Updater.install(ctx, web); }
+
+    @JavascriptInterface
+    public String lastError() { return CrashLog.read(); }
+
+    @JavascriptInterface
+    public void clearError() { CrashLog.clear(); }
 
     @JavascriptInterface
     public void toggleBubble() {
-        if (host != null) web.post(new Runnable() { public void run() { host.toggleBubble(); } });
+        if (host != null) onUi(new Runnable() { public void run() { host.toggleBubble(); } });
     }
 
     @JavascriptInterface
     public void close() {
-        if (host != null) web.post(new Runnable() { public void run() { host.close(); } });
+        if (host != null) onUi(new Runnable() { public void run() { host.close(); } });
     }
 
     @JavascriptInterface
     public void capture() {
-        if (host != null) web.post(new Runnable() { public void run() { host.capture(); } });
+        if (host != null) onUi(new Runnable() { public void run() { host.capture(); } });
+    }
+
+    @JavascriptInterface
+    public void pickLive(final String fwr) {
+        if (host == null) return;
+        float f = 0;
+        try { f = Float.parseFloat(fwr); } catch (Exception ignored) { }
+        final float ff = f;
+        onUi(new Runnable() { public void run() { host.pickLive(ff); } });
     }
 }

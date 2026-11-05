@@ -9,7 +9,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
@@ -19,9 +21,10 @@ import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
-import android.util.Base64;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -37,7 +40,6 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.Toast;
 
-import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 
 public class BubbleService extends Service implements Bridge.Host {
@@ -50,10 +52,21 @@ public class BubbleService extends Service implements Bridge.Host {
     private WindowManager.LayoutParams ballLp;
     private Panel panel;
     private WebView panelWeb;
+    private View closeBtn;
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     private MediaProjection proj;
-    private boolean capturing = false;
+    private boolean fgMedia = false;
+    private float pendingPick = -1;
+
+    // live pick
+    private LivePick pick;
+    private HandlerThread capThread;
+    private ImageReader reader;
+    private VirtualDisplay vd;
+    private Bitmap[] bufs = new Bitmap[2];
+    private int bufIdx = 0;
+    private long lastFrame = 0;
 
     /** Panel container that hands the Back key to the page. */
     private class Panel extends FrameLayout {
@@ -62,7 +75,8 @@ public class BubbleService extends Service implements Bridge.Host {
         @Override
         public boolean dispatchKeyEvent(KeyEvent e) {
             if (e.getKeyCode() == KeyEvent.KEYCODE_BACK) {
-                if (e.getAction() == KeyEvent.ACTION_UP && panelWeb != null) {
+                if (e.getAction() == KeyEvent.ACTION_UP) {
+                    if (panelWeb == null) { collapse(); return true; }
                     panelWeb.evaluateJavascript("window.ddtBack?ddtBack():false", new ValueCallback<String>() {
                         public void onReceiveValue(String v) { if (!"true".equals(v)) collapse(); }
                     });
@@ -70,6 +84,27 @@ public class BubbleService extends Service implements Bridge.Host {
                 return true;
             }
             return super.dispatchKeyEvent(e);
+        }
+    }
+
+    /** Native close button drawn exactly over the page's ✕ slot — works even if the page misbehaves. */
+    private class CloseBtn extends View {
+        final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        CloseBtn(Context c) { super(c); }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            float w = getWidth(), r = w / 2;
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(0xFF2C2C2E);
+            c.drawCircle(r, r, r, p);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeCap(Paint.Cap.ROUND);
+            p.setStrokeWidth(w * 0.07f);
+            p.setColor(0xFFAEAEB2);
+            float a = w * 0.33f, b = w * 0.67f;
+            c.drawLine(a, a, b, b, p);
+            c.drawLine(b, a, a, b, p);
         }
     }
 
@@ -81,6 +116,11 @@ public class BubbleService extends Service implements Bridge.Host {
     private static int overlayType() {
         return Build.VERSION.SDK_INT >= 26 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                 : WindowManager.LayoutParams.TYPE_PHONE;
+    }
+
+    private static void cutout(WindowManager.LayoutParams lp) {
+        if (Build.VERSION.SDK_INT >= 28)
+            lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
     }
 
     @SuppressWarnings("deprecation")
@@ -106,23 +146,72 @@ public class BubbleService extends Service implements Bridge.Host {
     @Override
     public void onCreate() {
         super.onCreate();
+        CrashLog.install(this);
         running = true;
-        startForeground(NID, notif());
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
-        addBall();
+        try {
+            addBall();
+        } catch (Throwable t) {
+            CrashLog.note("addBall", t);
+            Toast.makeText(this, "แสดง Bubble ไม่ได้: " + t.getMessage(), Toast.LENGTH_LONG).show();
+            stopSelf();
+        }
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         String a = intent == null ? null : intent.getAction();
-        if ("cap".equals(a)) {
-            onCapGranted(intent.getIntExtra("code", 0), (Intent) intent.getParcelableExtra("data"));
-        } else if ("capfail".equals(a)) {
-            capturing = false;
-            showPanel();
-            Updater.js(panelWeb, "ddtShotFail('ไม่ได้อนุญาตให้แคปหน้าจอ')");
+        try {
+            if ("cap".equals(a) || "start".equals(a)) {
+                Intent data = intent.getParcelableExtra("data");
+                goForeground(intent.getIntExtra("code", 0), data);
+                if ("cap".equals(a)) {
+                    if (proj != null && pendingPick >= 0) {
+                        final float f = pendingPick;
+                        pendingPick = -1;
+                        ui.postDelayed(new Runnable() { public void run() { startPick(f); } }, 400);
+                    } else if (proj == null) {
+                        pendingPick = -1;
+                        showPanel();
+                        Updater.js(panelWeb, "ddtShotFail('จับภาพหน้าจอไม่ได้')");
+                    }
+                }
+            } else if ("capfail".equals(a)) {
+                pendingPick = -1;
+                showPanel();
+                Updater.js(panelWeb, "ddtShotFail('ไม่ได้อนุญาตให้จับภาพหน้าจอ')");
+            } else {
+                goForeground(0, null);
+            }
+        } catch (Throwable t) {
+            CrashLog.note("onStartCommand", t);
         }
         return START_STICKY;
+    }
+
+    private void goForeground(int code, Intent data) {
+        if (data != null) {
+            try {
+                if (Build.VERSION.SDK_INT >= 29)
+                    startForeground(NID, notif(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
+                else
+                    startForeground(NID, notif());
+                fgMedia = true;
+                MediaProjectionManager m = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+                proj = m.getMediaProjection(code, data);
+                proj.registerCallback(new MediaProjection.Callback() {
+                    @Override
+                    public void onStop() { proj = null; stopCapture(); }
+                }, ui);
+                return;
+            } catch (Throwable t) {
+                CrashLog.note("projection", t);
+                proj = null;
+            }
+        }
+        if (!fgMedia) {
+            try { startForeground(NID, notif()); } catch (Throwable t) { CrashLog.note("startForeground", t); }
+        }
     }
 
     // ---------- ball ----------
@@ -144,6 +233,7 @@ public class BubbleService extends Service implements Bridge.Host {
             boolean moved;
             final Runnable longPress = new Runnable() {
                 public void run() {
+                    moved = true;
                     Toast.makeText(BubbleService.this, "ปิด Bubble แล้ว", Toast.LENGTH_SHORT).show();
                     stopSelf();
                 }
@@ -158,7 +248,7 @@ public class BubbleService extends Service implements Bridge.Host {
                     case MotionEvent.ACTION_MOVE:
                         float dx = e.getRawX() - sx, dy = e.getRawY() - sy;
                         if (!moved && Math.hypot(dx, dy) > dp(8)) { moved = true; ui.removeCallbacks(longPress); }
-                        if (moved) {
+                        if (moved && ball != null) {
                             ballLp.x = ox + (int) dx; ballLp.y = oy + (int) dy;
                             try { wm.updateViewLayout(ball, ballLp); } catch (Exception ignored) { }
                         }
@@ -166,8 +256,11 @@ public class BubbleService extends Service implements Bridge.Host {
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL:
                         ui.removeCallbacks(longPress);
+                        if (ball == null) return true;
                         if (moved) snap();
-                        else if (e.getAction() == MotionEvent.ACTION_UP) expand();
+                        else if (e.getAction() == MotionEvent.ACTION_UP) {
+                            try { expand(); } catch (Throwable t) { CrashLog.note("expand", t); collapse(); }
+                        }
                         return true;
                 }
                 return false;
@@ -205,23 +298,57 @@ public class BubbleService extends Service implements Bridge.Host {
             }
         });
         panel.addView(panelWeb, new FrameLayout.LayoutParams(-1, -1));
+
+        closeBtn = new CloseBtn(this);
+        closeBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { collapse(); }
+        });
+        closeBtn.setContentDescription("ย่อกลับเป็น Bubble");
+        panel.addView(closeBtn, new FrameLayout.LayoutParams(dp(36), dp(36)));
+        panel.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int or, int ob) {
+                placeClose(r - l, b - t);
+            }
+        });
+
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(-1, -1, overlayType(),
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
                 PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.TOP | Gravity.LEFT;
+        cutout(lp);
         wm.addView(panel, lp);
         panelWeb.loadUrl("file:///android_asset/index.html?bubble=1");
     }
 
+    /** Same maths as fit() in index.html: 844×390 stage scaled to fit; ✕ centre at stage (810, 30). */
+    private void placeClose(int w, int h) {
+        if (closeBtn == null || w == 0) return;
+        float dens = getResources().getDisplayMetrics().density;
+        float cw = w / dens, ch = h / dens;
+        float s = Math.min(cw / 844f, ch / 390f);
+        float ox = (cw - 844 * s) / 2, oy = (ch - 390 * s) / 2;
+        int size = Math.round(36 * s * dens);
+        int cx = Math.round((ox + 810 * s) * dens), cy = Math.round((oy + 30 * s) * dens);
+        FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) closeBtn.getLayoutParams();
+        if (p.width == size && p.leftMargin == cx - size / 2 && p.topMargin == cy - size / 2) return;
+        p.width = size; p.height = size;
+        p.leftMargin = cx - size / 2; p.topMargin = cy - size / 2;
+        p.gravity = Gravity.TOP | Gravity.LEFT;
+        closeBtn.setLayoutParams(p);
+    }
+
     private void collapse() {
-        if (panel == null) return;
-        try { wm.removeView(panel); } catch (Exception ignored) { }
-        if (panelWeb != null) { panelWeb.destroy(); panelWeb = null; }
-        panel = null;
+        if (pick != null) endPick(false, null);
+        if (panel != null) {
+            try { wm.removeView(panel); } catch (Exception ignored) { }
+            if (panelWeb != null) { try { panelWeb.destroy(); } catch (Exception ignored) { } panelWeb = null; }
+            panel = null;
+            closeBtn = null;
+        }
         if (ball != null) ball.setVisibility(View.VISIBLE);
     }
 
-    private void hidePanel() { if (panel != null) panel.setVisibility(View.INVISIBLE); }
+    private void hidePanel() { if (panel != null) panel.setVisibility(View.GONE); }
 
     private void showPanel() { if (panel != null) panel.setVisibility(View.VISIBLE); }
 
@@ -231,101 +358,104 @@ public class BubbleService extends Service implements Bridge.Host {
     @Override
     public void close() { collapse(); }
 
-    // ---------- screen capture ----------
     @Override
-    public void capture() {
-        if (capturing) return;
-        capturing = true;
+    public void capture() { pickLive(0); }
+
+    // ---------- live map pick ----------
+    @Override
+    public void pickLive(float fwr) {
+        if (pick != null) return;
         hidePanel();
         if (proj == null) {
+            pendingPick = fwr;
             Intent i = new Intent(this, ScreenCapActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             startActivity(i);
-        } else {
-            ui.postDelayed(new Runnable() { public void run() { grab(); } }, 350);
+            return;
         }
+        ui.postDelayed(new Runnable() { public void run() { startPick(fwr); } }, 150);
     }
 
-    private void onCapGranted(int code, Intent data) {
-        try {
-            if (Build.VERSION.SDK_INT >= 29)
-                startForeground(NID, notif(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
-            MediaProjectionManager m = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-            proj = m.getMediaProjection(code, data);
-            proj.registerCallback(new MediaProjection.Callback() {
-                @Override
-                public void onStop() { proj = null; }
-            }, ui);
-            ui.postDelayed(new Runnable() { public void run() { grab(); } }, 600);
-        } catch (Exception e) {
-            proj = null;
-            fail("แคปจอไม่สำเร็จ: " + e.getMessage());
-        }
-    }
-
-    private void fail(String msg) {
-        capturing = false;
-        showPanel();
-        Updater.js(panelWeb, "ddtShotFail(" + org.json.JSONObject.quote(msg) + ")");
-    }
-
-    private void grab() {
-        if (proj == null) { capturing = false; capture(); return; }
+    private void startPick(float fwr) {
         DisplayMetrics m = new DisplayMetrics();
         wm.getDefaultDisplay().getRealMetrics(m);
         final int w = m.widthPixels, h = m.heightPixels;
-        final ImageReader reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2);
-        final VirtualDisplay vd;
         try {
-            vd = proj.createVirtualDisplay("ddt-shot", w, h, m.densityDpi,
-                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.getSurface(), null, ui);
-        } catch (Exception e) {
-            reader.close();
-            proj = null;          // token used up: ask again next time
-            capturing = false;
-            capture();
+            capThread = new HandlerThread("ddt-cap");
+            capThread.start();
+            Handler ch = new Handler(capThread.getLooper());
+            reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 3);
+            reader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+                public void onImageAvailable(ImageReader r) { onFrame(r, w, h); }
+            }, ch);
+            vd = proj.createVirtualDisplay("ddt-live", w, h, m.densityDpi,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.getSurface(), null, ch);
+        } catch (Throwable t) {
+            CrashLog.note("startPick", t);
+            stopCapture();
+            proj = null;                 // token unusable: ask again
+            pickLive(fwr);
             return;
         }
-        final int[] tries = {0};
-        ui.postDelayed(new Runnable() {
-            public void run() {
-                Image img = null;
-                try { img = reader.acquireLatestImage(); } catch (Exception ignored) { }
-                if (img == null && ++tries[0] < 15) { ui.postDelayed(this, 90); return; }
-                Bitmap bmp = null;
-                if (img != null) {
-                    try {
-                        Image.Plane p = img.getPlanes()[0];
-                        ByteBuffer buf = p.getBuffer();
-                        int ps = p.getPixelStride(), rs = p.getRowStride();
-                        Bitmap full = Bitmap.createBitmap(rs / ps, h, Bitmap.Config.ARGB_8888);
-                        full.copyPixelsFromBuffer(buf);
-                        bmp = (full.getWidth() == w) ? full : Bitmap.createBitmap(full, 0, 0, w, h);
-                    } catch (Exception ignored) { }
-                    img.close();
-                }
-                vd.release();
-                reader.close();
-                capturing = false;
-                showPanel();
-                if (bmp == null) { fail("แคปจอไม่สำเร็จ ลองใหม่อีกครั้ง"); return; }
-                deliver(bmp);
+        pick = new LivePick(this, fwr, w, new LivePick.Cb() {
+            public void done(float fw, float sx, float sy, float tx, float ty, int sw) {
+                endPick(true, "ddtPickDone(" + fw + "," + sx + "," + sy + "," + tx + "," + ty + "," + sw + ")");
             }
-        }, 120);
+            public void cancel() { endPick(false, null); }
+        });
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(-1, -1, overlayType(),
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                        | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.TOP | Gravity.LEFT;
+        cutout(lp);
+        wm.addView(pick, lp);
+        pick.requestFocus();
     }
 
-    private void deliver(final Bitmap src) {
-        new Thread(new Runnable() {
-            public void run() {
-                Bitmap b = src;
-                int maxW = 2400;
-                if (b.getWidth() > maxW) b = Bitmap.createScaledBitmap(b, maxW, Math.round(b.getHeight() * (maxW / (float) b.getWidth())), true);
-                ByteArrayOutputStream bo = new ByteArrayOutputStream();
-                b.compress(Bitmap.CompressFormat.JPEG, 88, bo);
-                String b64 = Base64.encodeToString(bo.toByteArray(), Base64.NO_WRAP);
-                Updater.js(panelWeb, "ddtShot('" + b64 + "')");
+    private void onFrame(ImageReader r, int w, int h) {
+        Image img = null;
+        try {
+            img = r.acquireLatestImage();
+            if (img == null) return;
+            LivePick p = pick;
+            long now = SystemClock.uptimeMillis();
+            if (p == null || (!p.wantsFrames() && now - lastFrame < 400) || now - lastFrame < 60) return;
+            lastFrame = now;
+            Image.Plane pl = img.getPlanes()[0];
+            ByteBuffer buf = pl.getBuffer();
+            int bw = pl.getRowStride() / pl.getPixelStride();
+            Bitmap b = bufs[bufIdx];
+            if (b == null || b.getWidth() != bw || b.getHeight() != h) {
+                b = Bitmap.createBitmap(bw, h, Bitmap.Config.ARGB_8888);
+                bufs[bufIdx] = b;
             }
-        }).start();
+            buf.rewind();
+            synchronized (p.lock()) { b.copyPixelsFromBuffer(buf); }
+            bufIdx ^= 1;
+            p.setFrame(b);
+        } catch (Throwable t) {
+            CrashLog.note("frame", t);
+        } finally {
+            if (img != null) img.close();
+        }
+    }
+
+    private void stopCapture() {
+        if (vd != null) { try { vd.release(); } catch (Exception ignored) { } vd = null; }
+        if (reader != null) { try { reader.close(); } catch (Exception ignored) { } reader = null; }
+        if (capThread != null) { capThread.quitSafely(); capThread = null; }
+        bufs = new Bitmap[2];
+    }
+
+    private void endPick(boolean ok, String js) {
+        if (pick != null) {
+            try { wm.removeView(pick); } catch (Exception ignored) { }
+            pick = null;
+        }
+        stopCapture();
+        showPanel();
+        if (js != null) Updater.js(panelWeb, js);
     }
 
     @Override
