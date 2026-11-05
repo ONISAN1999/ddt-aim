@@ -1,0 +1,85 @@
+name: Release APK
+
+# Each push to main whose AndroidManifest has a new versionName publishes
+# Release v<versionName> with ddt-aim.apk + version.json (the in-app updater reads it).
+# Signing: if repo secrets KS_B64 (base64 keystore) + KS_PASS exist, CI builds and signs here;
+# otherwise it publishes the pre-signed dist/ddt-aim.apk committed with the source.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HAS_KEY: ${{ secrets.KS_B64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Read version
+        id: v
+        run: |
+          echo "code=$(grep -oP 'versionCode="\K[0-9]+' app/AndroidManifest.xml)" >> "$GITHUB_OUTPUT"
+          echo "name=$(grep -oP 'versionName="\K[^"]+' app/AndroidManifest.xml)" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this version is already released
+        id: chk
+        run: |
+          if gh release view "v${{ steps.v.outputs.name }}" >/dev/null 2>&1; then
+            echo "exists=1" >> "$GITHUB_OUTPUT"; echo "v${{ steps.v.outputs.name }} already released"
+          fi
+
+      - name: Android SDK
+        if: steps.chk.outputs.exists != '1'
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+
+      - name: Build and sign in CI
+        if: steps.chk.outputs.exists != '1' && env.HAS_KEY == 'true'
+        env:
+          KS_B64: ${{ secrets.KS_B64 }}
+          KS_PASS: ${{ secrets.KS_PASS }}
+        run: |
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/ks.p12"
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          ANDROID_JAR="$ANDROID_HOME/platforms/android-34/android.jar" KEYSTORE="$RUNNER_TEMP/ks.p12" \
+            AAPT="$BT/aapt" ZIPALIGN="$BT/zipalign" APKSIGNER="$BT/apksigner" D8="$BT/d8" ./build.sh
+          cp build/ddt-aim.apk ddt-aim.apk
+
+      - name: Use pre-signed APK from dist/
+        if: steps.chk.outputs.exists != '1' && env.HAS_KEY != 'true'
+        run: |
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          got=$("$BT/aapt" dump badging dist/ddt-aim.apk | grep -oP "versionCode='\K[0-9]+")
+          if [ "$got" != "${{ steps.v.outputs.code }}" ]; then
+            echo "dist/ddt-aim.apk is versionCode $got but manifest says ${{ steps.v.outputs.code }}"; exit 1
+          fi
+          "$BT/apksigner" verify dist/ddt-aim.apk
+          cp dist/ddt-aim.apk ddt-aim.apk
+
+      - name: Publish release
+        if: steps.chk.outputs.exists != '1'
+        run: |
+          name="${{ steps.v.outputs.name }}"; code="${{ steps.v.outputs.code }}"
+          python3 - "$name" "$code" <<'PY'
+          import json, os, sys
+          name, code = sys.argv[1], int(sys.argv[2])
+          notes = open("app/notes.txt", encoding="utf-8").read().strip()
+          json.dump({
+              "versionCode": code, "versionName": name,
+              "apk": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/v{name}/ddt-aim.apk",
+              "size": os.path.getsize("ddt-aim.apk"), "notes": notes,
+          }, open("version.json", "w", encoding="utf-8"), ensure_ascii=False)
+          PY
+          gh release create "v$name" ddt-aim.apk version.json \
+            --title "DDT แรงยิง $name" --notes-file app/notes.txt --latest

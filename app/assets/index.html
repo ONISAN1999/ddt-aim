@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>DDT แรงยิง</title>
+<style>
+:root{--bg:#000;--g1:#1C1C1E;--g2:#2C2C2E;--g3:#3A3A3C;--g4:#48484A;--g5:#636366;--l2:#AEAEB2;--l3:#8E8E93;--sep:#38383A;--blue:#0A84FF;--cyan:#64D2FF;--teal:#5AC8FA;--orange:#FF9F0A;--green:#30D158}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;color:#fff;font-family:-apple-system,"SF Pro Text",Roboto,"Noto Sans Thai",system-ui,sans-serif;user-select:none;-webkit-user-select:none}
+body.bubble{background:rgba(0,0,0,.94)}
+button{font-family:inherit;color:#fff;border:0;padding:0;cursor:pointer;touch-action:manipulation}
+button:active{filter:brightness(1.35)}
+#stage{position:absolute;left:0;top:0;width:844px;height:390px;transform-origin:0 0;padding:10px 12px 12px;display:flex;flex-direction:column;gap:10px}
+.hdr{height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 4px}
+.hdr .side{display:flex;align-items:center;gap:8px;width:220px}
+.hdr .side.r{justify-content:flex-end}
+.ttl{font-size:17px;font-weight:600}
+.seg{display:flex;padding:2px;border-radius:9px;background:var(--g1);gap:2px}
+.seg button{height:32px;padding:0 18px;border-radius:7px;background:transparent;font-size:13px;font-weight:500;color:#EBEBF5}
+.seg button.on{background:var(--g5);color:#fff;font-weight:600}
+.round{width:36px;height:36px;border-radius:18px;background:var(--g2);display:flex;align-items:center;justify-content:center}
+.view{flex:1;min-height:0;display:none}
+.view.on{display:grid}
+#vCalc{grid-template-columns:250px 236px minmax(0,1fr);gap:12px}
+#vMap{grid-template-columns:minmax(0,1fr) 244px;gap:12px}
+.card{background:var(--g1);border-radius:16px}
+.col{display:flex;flex-direction:column;gap:10px;min-height:0}
+.res{padding:10px 14px 8px;display:flex;flex-direction:column;gap:4px}
+.row{display:flex;align-items:baseline;justify-content:space-between}
+.mut{font-size:13px;color:var(--l2)}
+.pw{font-size:40px;line-height:1;font-weight:700;letter-spacing:-1px}
+.sub{font-size:11px;color:var(--l2);line-height:1.4;white-space:nowrap}
+.g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.chip{height:44px;border-radius:11px;background:var(--g2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.chip b{font-size:14px;font-weight:600;line-height:1.2}.chip span{font-size:11px;color:var(--l2);line-height:1.2}
+.chip.on{background:var(--blue)}.chip.on span{color:#fff}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{height:64px;border-radius:14px;background:var(--g1);border:2px solid var(--g1);text-align:left;padding:6px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.field.on{border-color:var(--blue)}
+.field small{font-size:11px;color:var(--l2)}.field b{font-size:24px;font-weight:700}
+.key{height:44px;border-radius:11px;background:var(--g2);font-size:20px;font-weight:500}
+.key.op{background:var(--g3)}.key.sm{font-size:12px}
+.wind{padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.wseg{display:grid;grid-template-columns:1fr 1fr;gap:2px;padding:2px;border-radius:9px;background:var(--g2)}
+.wseg button{height:32px;border-radius:7px;background:transparent;font-size:13px;font-weight:600}
+.wseg button.on{background:var(--g5)}
+.g6{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
+.g5{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
+.wi{height:44px;border-radius:10px;background:var(--g2);font-size:18px;font-weight:600}
+.wd{height:38px;border-radius:10px;background:var(--g2);font-size:15px}
+.wi.on,.wd.on{background:var(--blue)}
+.spd{height:30px;border-radius:7px;background:var(--g2);font-size:12px}
+.spd.on{background:var(--g4)}
+/* map */
+.vp{position:relative;overflow:hidden;touch-action:none;background:var(--g1);border-radius:16px}
+.vp img{position:absolute;left:0;top:0;transform-origin:0 0;max-width:none;pointer-events:none;image-rendering:auto}
+.mk{position:absolute;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:11px;border:2px solid #fff;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;pointer-events:none}
+.mk::after{content:"";position:absolute;left:50%;top:50%;width:2px;height:2px;margin:-1px;background:currentColor;border-radius:1px}
+.pill{position:absolute;left:10px;top:10px;padding:6px 10px;border-radius:10px;background:rgba(28,28,30,.88);font-size:12px}
+.zoom{position:absolute;right:10px;bottom:10px;display:flex;align-items:center;gap:2px;padding:3px;border-radius:12px;background:rgba(44,44,46,.94)}
+.zoom button{width:44px;height:40px;border-radius:9px;background:transparent;font-size:22px}
+.zoom span{min-width:44px;text-align:center;font-size:13px;font-weight:600}
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--l2);font-size:14px;text-align:center;padding:24px}
+.btn{height:44px;border-radius:12px;background:var(--g2);font-size:14px;display:flex;align-items:center;justify-content:center;padding:0 16px}
+.btn.pri{background:var(--blue);font-weight:600}
+.btn.ok{background:var(--green);color:#000;font-weight:600}
+.list{background:var(--g1);border-radius:14px;overflow:hidden}
+.step{width:100%;height:38px;background:transparent;border-bottom:.5px solid var(--sep);display:flex;align-items:center;gap:10px;padding:0 12px;text-align:left}
+.step:last-child{border-bottom:0}
+.step.on{background:var(--g2)}
+.step i{width:20px;height:20px;border-radius:10px;border:2px solid #fff;font-size:11px;font-weight:700;font-style:normal;display:flex;align-items:center;justify-content:center}
+.step span{flex:1;font-size:13px}.step em{font-size:12px;font-style:normal}
+.out{padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:3px 10px}
+.out small{font-size:11px;color:var(--l2)}.out b{font-size:22px}.out s{font-size:11px;color:var(--l3);text-decoration:none}
+/* overlays */
+.ov{position:absolute;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:5}
+.ov.on{display:flex}
+.sheet{width:380px;background:rgba(44,44,46,.98);border-radius:18px;padding:18px 18px 14px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+.notes{background:var(--g1);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.6;color:#EBEBF5;white-space:pre-line;max-height:110px;overflow:auto}
+.bar{height:6px;border-radius:3px;background:var(--g3);overflow:hidden}.bar div{height:6px;background:var(--blue);width:0}
+.set{width:420px;display:flex;flex-direction:column;gap:8px}
+.srow{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:.5px solid var(--sep);font-size:15px}
+.srow:last-child{border-bottom:0}
+.sw{width:51px;height:31px;border-radius:16px;background:#39393D;padding:2px;display:flex}
+.sw.on{background:var(--green);justify-content:flex-end}
+.sw span{width:27px;height:27px;border-radius:14px;background:#fff;display:block}
+.link{background:transparent;color:var(--blue);font-size:15px;width:100%;height:48px;text-align:left;padding:0 14px}
+#toast{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);max-width:520px;padding:10px 16px;border-radius:14px;background:rgba(58,58,60,.97);font-size:13px;line-height:1.5;text-align:center;display:none;z-index:9}
+.ubar{position:absolute;left:50%;top:6px;transform:translateX(-50%);display:none;align-items:center;gap:10px;padding:6px 8px 6px 14px;border-radius:14px;background:rgba(44,44,46,.97);font-size:13px;z-index:4}
+.ubar.on{display:flex}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="hdr">
+    <div class="side">
+      <svg width="24" height="24" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22.4" fill="#0A84FF"/><circle cx="50" cy="50" r="27" fill="none" stroke="#fff" stroke-width="7"/><path d="M50 12v14M50 74v14M12 50h14M74 50h14" stroke="#fff" stroke-width="7" stroke-linecap="round"/><circle cx="50" cy="50" r="8" fill="#FF9F0A"/></svg>
+      <span class="ttl">DDT แรงยิง</span>
+    </div>
+    <div class="seg"><button id="tCalc" class="on">กดเลข</button><button id="tMap">เลือกจากแผนที่</button></div>
+    <div class="side r">
+      <button class="round" id="bBubble" aria-label="เปิด Bubble" style="display:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 1.5v4M12 18.5v4M1.5 12h4M18.5 12h4"/></svg></button>
+      <button class="round" id="bSet" aria-label="ตั้งค่า"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#AEAEB2" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+      <button class="round" id="bClose" aria-label="ย่อกลับเป็น Bubble" style="display:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#AEAEB2" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+  </div>
+
+  <!-- CALC -->
+  <div class="view on" id="vCalc">
+    <div class="col">
+      <div class="card res">
+        <div class="row"><span class="mut" id="rAng">แรง · มุม 45°</span><span id="rStat" style="font-size:12px;font-weight:600"></span></div>
+        <div style="display:flex;align-items:baseline;gap:10px"><span class="pw" id="rPow">—</span><span class="sub" id="rSub">ใส่ระยะก่อน</span></div>
+        <svg width="222" height="54" viewBox="0 0 222 62" preserveAspectRatio="none" aria-hidden="true" style="margin-top:2px"><line x1="0" y1="61" x2="222" y2="61" stroke="#3A3A3C"/><path id="rPath" d="" fill="none" stroke="#0A84FF" stroke-width="2" stroke-dasharray="4 3"/><circle id="rS" r="4" fill="#5AC8FA" cx="-9" cy="-9"/><circle id="rT" r="5" fill="none" stroke="#FF9F0A" stroke-width="2" cx="-9" cy="-9"/></svg>
+      </div>
+      <div class="g4" id="chips"></div>
+    </div>
+    <div class="col" style="gap:8px">
+      <div class="fields">
+        <button class="field on" id="fDist"><small id="fDistL">ระยะ → (ช่อง)</small><b id="fDistV">0</b></button>
+        <button class="field" id="fH"><small id="fHL">เป้าสูงกว่า (px)</small><b id="fHV">+0</b></button>
+      </div>
+      <div class="g4" id="keys"></div>
+    </div>
+    <div class="card wind">
+      <div class="row"><span class="mut">ลม</span><span id="wShow" style="font-size:26px;font-weight:700;color:var(--cyan)">→ 0.0</span></div>
+      <div class="wseg"><button id="wL">← พัดซ้าย</button><button id="wR">พัดขวา →</button></div>
+      <div class="g6" id="wInts"></div>
+      <div class="g5" id="wDecs"></div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:2px"><span style="font-size:11px;color:var(--l2);white-space:nowrap">ความเร็วหลอด</span><div class="g6" id="spds" style="flex:1;gap:3px"></div></div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div class="view" id="vMap">
+    <div class="vp" id="vp">
+      <img id="shot" alt="">
+      <div id="mks"></div>
+      <div class="empty" id="mEmpty"><span id="mEmptyT">แคปหน้าจอเกม แล้วขยายแผนที่ย่อเพื่อวางจุด</span><button class="btn pri" id="bShot2">แคปจอ</button></div>
+      <div class="pill" id="mPill" style="display:none">แตะเพื่อวาง: <b id="mStepN" style="color:var(--blue)"></b></div>
+      <div class="zoom" id="mZoom" style="display:none"><button id="zOut" aria-label="ย่อ">−</button><span id="zLbl">1×</span><button id="zIn" aria-label="ขยาย">+</button></div>
+    </div>
+    <div class="col" style="gap:8px">
+      <div class="list" id="steps"></div>
+      <div class="card out">
+        <small id="oDL">ระยะ</small><small>ต่างระดับ</small>
+        <b id="oD">—</b><b id="oH">—</b>
+        <s id="oDP">ช่อง</s><s>px</s>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:auto">
+        <button class="btn" id="bShot">แคปจอ</button>
+        <button class="btn pri" id="bUse">ใช้ค่านี้</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="ubar" id="ubar"><span id="ubarT">มีเวอร์ชันใหม่</span><button class="btn pri" id="ubarB" style="height:32px;font-size:13px">ดู</button></div>
+
+  <!-- UPDATE -->
+  <div class="ov" id="ovUp">
+    <div class="sheet">
+      <div style="display:flex;align-items:center;gap:12px">
+        <svg width="48" height="48" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22.4" fill="#0A84FF"/><circle cx="50" cy="50" r="27" fill="none" stroke="#fff" stroke-width="6"/><path d="M50 12v14M50 74v14M12 50h14M74 50h14" stroke="#fff" stroke-width="6" stroke-linecap="round"/><circle cx="50" cy="50" r="7" fill="#FF9F0A"/></svg>
+        <div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:17px;font-weight:600" id="uT">มีเวอร์ชันใหม่</span><span style="font-size:12px;color:var(--l2)" id="uV"></span></div>
+      </div>
+      <div class="notes" id="uN"></div>
+      <div id="uDl" style="display:none;flex-direction:column;gap:6px"><div class="bar"><div id="uBar"></div></div><span style="font-size:12px;color:var(--l2)" id="uP">กำลังดาวน์โหลด 0%</span></div>
+      <div id="uBtns" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn" id="uLater">ไว้ก่อน</button><button class="btn pri" id="uGo">อัปเดตเลย</button></div>
+      <button class="btn ok" id="uInst" style="display:none">ติดตั้งทับเลย</button>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="ov" id="ovSet">
+    <div class="set">
+      <div class="list">
+        <div class="srow" style="height:56px;gap:12px;justify-content:flex-start">
+          <svg width="36" height="36" viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22.4" fill="#0A84FF"/><circle cx="50" cy="50" r="27" fill="none" stroke="#fff" stroke-width="7"/><path d="M50 12v14M50 74v14M12 50h14M74 50h14" stroke="#fff" stroke-width="7" stroke-linecap="round"/><circle cx="50" cy="50" r="8" fill="#FF9F0A"/></svg>
+          <div style="display:flex;flex-direction:column;gap:2px;flex:1"><span style="font-weight:600">DDT แรงยิง</span><span style="font-size:12px;color:var(--l2)" id="sVer">เวอร์ชัน —</span></div>
+        </div>
+        <div class="srow"><span>ตรวจอัปเดตตอนเปิดแอป</span><button class="sw on" id="sAuto" aria-label="ตรวจอัปเดตอัตโนมัติ"><span></span></button></div>
+        <button class="link" id="sCheck">ตรวจหาเวอร์ชันใหม่</button>
+      </div>
+      <div class="list">
+        <button class="link" id="sFrame" style="color:#fff">ล้างกรอบแผนที่ที่จำไว้</button>
+      </div>
+      <button class="btn" id="sClose" style="align-self:flex-end;width:120px">เสร็จ</button>
+    </div>
+  </div>
+  <div id="toast"></div>
+</div>
+
+<input type="file" id="fileIn" accept="image/*" style="display:none">
+
+<script>
+"use strict";
+var $=function(id){return document.getElementById(id)};
+var HOST=window.DDT||null;
+var BUBBLE=/[?&]bubble=1/.test(location.search);
+var W=844,H=390;
+function fit(){var s=Math.min(innerWidth/W,innerHeight/H),st=$("stage");st.style.transform="translate("+((innerWidth-W*s)/2)+"px,"+((innerHeight-H*s)/2)+"px) scale("+s+")";}
+addEventListener("resize",fit);fit();
+function lsGet(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+var toastT;function toast(t,ms){var el=$("toast");el.textContent=t;el.style.display="block";clearTimeout(toastT);toastT=setTimeout(function(){el.style.display="none"},ms||3200)}
+
+/* ---------- physics (สูตรตามไฟล์ DDT) ---------- */
+var BAR=[5.72,4.76,4.08,3.57,3.17,2.86];
+function R(v){var t=(v+0.005)*100;return (t<0?Math.ceil(t):Math.floor(t))/100}
+function sim(F,a,dir,w,tx,ty,keep){
+  var g=dir>0?-a:a-180,r=g/180*Math.PI,vx=F*Math.cos(r),vy=F*Math.sin(r),x=30*dir,y=20,px=x,py=y,wf=w*240;
+  var pts=keep?[[x,y]]:null,best=1e9,bt=0,bi=0;
+  for(var i=1;i<1500;i++){
+    var ax=R((wf-2*vx)/10);vx=R(vx+ax*0.04);x=R(x+R(vx*0.04));
+    var ay=R((7000-2*vy)/10);vy=R(vy+ay*0.04);y=R(y-R(vy*0.04));
+    if(keep)pts.push([x,y]);
+    var dx=x-px,dy=y-py,L=dx*dx+dy*dy,t=L?((tx-px)*dx+(ty-py)*dy)/L:0;t=t<0?0:t>1?1:t;
+    var d=Math.hypot(px+t*dx-tx,py+t*dy-ty);if(d<best){best=d;bt=i*0.04;bi=i}
+    px=x;py=y;if(y<ty-800||Math.abs(x)>8000)break;
+  }
+  return {best:best,bt:bt,bi:bi,pts:pts};
+}
+function solve(a,dir,w,tx,ty){var bp=0,bb=1e9,bt=0;for(var p=0;p<=100;p++){var s=sim(p*20,a,dir,w,tx,ty,false);if(s.best<bb){bb=s.best;bp=p;bt=s.bt}}return {p:bp,err:bb,t:bt}}
+window.ddtSolve=solve;window.ddtSim=sim;
+
+/* ---------- calc state ---------- */
+var ANGLES=[30,45,50,55,60,65,70,90];
+var S=Object.assign({field:"dist",dist:"",h:"",hSign:1,dir:1,wDir:1,wInt:0,wDec:0,angle:45,speed:3},lsGet("ddt_state",{}));
+S.field="dist";
+function save(){lsSet("ddt_state",{dist:S.dist,h:S.h,hSign:S.hSign,dir:S.dir,wDir:S.wDir,wInt:S.wInt,wDec:S.wDec,angle:S.angle,speed:S.speed})}
+var KEYS=["7","8","9","⌫","4","5","6","C","1","2","3","±",".","0","สลับช่อง","เป้า ⇆"];
+function buildStatic(){
+  $("keys").innerHTML=KEYS.map(function(k,i){var op=!/^[0-9.]$/.test(k);return '<button class="key'+(op?" op":"")+(k.length>2?" sm":"")+'" data-k="'+i+'"'+(k==="⌫"?' aria-label="ลบ"':'')+'>'+k+'</button>'}).join("");
+  $("wInts").innerHTML=[0,1,2,3,4,5].map(function(n){return '<button class="wi" data-wi="'+n+'">'+n+'</button>'}).join("");
+  $("wDecs").innerHTML=[0,1,2,3,4,5,6,7,8,9].map(function(n){return '<button class="wd" data-wd="'+n+'">.'+n+'</button>'}).join("");
+  $("spds").innerHTML=[1,2,3,4,5,6].map(function(n){return '<button class="spd" data-sp="'+n+'">'+n+'</button>'}).join("");
+}
+function key(k){
+  var f=S.field,cur=S[f];
+  if(k==="⌫")S[f]=cur.slice(0,-1);
+  else if(k==="C")S[f]="";
+  else if(k==="±"){S.hSign=-S.hSign;S.field="h"}
+  else if(k==="สลับช่อง")S.field=f==="dist"?"h":"dist";
+  else if(k==="เป้า ⇆")S.dir=-S.dir;
+  else{if(k==="."&&(f==="h"||cur.indexOf(".")>=0))return;if(cur.length>=5)return;S[f]=(cur==="0"&&k!==".")?k:cur+k}
+  render();
+}
+function render(){
+  save();
+  var dist=parseFloat(S.dist)||0,hv=(parseInt(S.h,10)||0)*S.hSign,wind=S.wDir*(S.wInt+S.wDec/10);
+  var tx=dist*100*S.dir,ty=hv,has=dist>0;
+  $("fDist").classList.toggle("on",S.field==="dist");$("fH").classList.toggle("on",S.field==="h");
+  $("fDistV").textContent=S.dist||"0";$("fDistL").textContent="ระยะ "+(S.dir>0?"→":"←")+" (ช่อง)";
+  $("fHV").textContent=(S.hSign<0?"−":"+")+(S.h||"0");$("fHL").textContent="เป้า"+(S.hSign<0?"ต่ำกว่า":"สูงกว่า")+" (px)";
+  $("wShow").textContent=(S.wDir>0?"→ ":"← ")+S.wInt+"."+S.wDec;
+  $("wL").classList.toggle("on",S.wDir<0);$("wR").classList.toggle("on",S.wDir>0);
+  [].forEach.call(document.querySelectorAll("[data-wi]"),function(b){b.classList.toggle("on",+b.dataset.wi===S.wInt)});
+  [].forEach.call(document.querySelectorAll("[data-wd]"),function(b){b.classList.toggle("on",+b.dataset.wd===S.wDec)});
+  [].forEach.call(document.querySelectorAll("[data-sp]"),function(b){b.classList.toggle("on",+b.dataset.sp===S.speed)});
+  $("chips").innerHTML=ANGLES.map(function(a){var r=has?solve(a,S.dir,wind,tx,ty):null;return '<button class="chip'+(a===S.angle?" on":"")+'" data-a="'+a+'"><b>'+a+'°</b><span>'+(r?r.p+"%"+(r.err>20?" ~":""):"—")+'</span></button>'}).join("");
+  $("rAng").textContent="แรง · มุม "+S.angle+"°";
+  var pw=$("rPow"),st=$("rStat");
+  if(!has){pw.textContent="—";pw.style.color="#fff";$("rSub").textContent="ใส่ระยะก่อน";st.textContent="";$("rPath").setAttribute("d","");mv("rS",-9,-9);mv("rT",-9,-9);return}
+  var r=solve(S.angle,S.dir,wind,tx,ty),T=BAR[S.speed-1],hit=r.err<=20,col=hit?"var(--green)":"var(--orange)";
+  pw.textContent=r.p+"%";pw.style.color=col;st.textContent=hit?"โดน":"ไม่ถึง ลองมุมอื่น";st.style.color=col;
+  $("rSub").innerHTML="ลอย "+r.t.toFixed(2)+" วิ · ห่าง "+Math.round(r.err)+" px<br>ปล่อยหลอด "+(Math.max(0,r.p-1)/100*T).toFixed(2)+"–"+(r.p/100*T).toFixed(2)+" วิ";
+  var tr=sim(r.p*20,S.angle,S.dir,wind,tx,ty,true),pts=tr.pts.slice(0,tr.bi+2);
+  var xs=pts.map(function(p){return p[0]}).concat([0,tx]),ys=pts.map(function(p){return p[1]}).concat([0,ty]);
+  var x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs),y0=Math.min.apply(null,ys),y1=Math.max.apply(null,ys);
+  var k=Math.min(210/Math.max(1,x1-x0),52/Math.max(1,y1-y0)),ox=6+(210-(x1-x0)*k)/2;
+  var X=function(x){return (ox+(x-x0)*k).toFixed(1)},Y=function(y){return (57-(y-y0)*k).toFixed(1)};
+  $("rPath").setAttribute("d",pts.map(function(p,i){return (i?"L":"M")+X(p[0])+" "+Y(p[1])}).join(" "));
+  mv("rS",X(0),Y(0));mv("rT",X(tx),Y(ty));
+}
+function mv(id,x,y){$(id).setAttribute("cx",x);$(id).setAttribute("cy",y)}
+
+/* ---------- map pick ---------- */
+var STEPS=[{l:"ขอบซ้ายกรอบจอ",c:"#FFFFFF"},{l:"ขอบขวากรอบจอ",c:"#FFFFFF"},{l:"ตัวเรา",c:"#5AC8FA"},{l:"เป้าหมาย",c:"#FF9F0A"}];
+var M={img:null,iw:0,ih:0,s0:1,s:1,tx:0,ty:0,pts:[null,null,null,null],step:0,fwr:lsGet("ddt_fwr",0),useMem:false};
+function vpSize(){var v=$("vp");return {w:v.offsetWidth,h:v.offsetHeight}}
+function loadShot(src){
+  var im=$("shot");im.onload=function(){
+    setTab("map");
+    M.iw=im.naturalWidth;M.ih=im.naturalHeight;im.style.width=M.iw+"px";im.style.height=M.ih+"px";
+    var v=vpSize();M.s0=Math.min(v.w/M.iw,v.h/M.ih);M.s=M.s0;M.tx=(v.w-M.iw*M.s)/2;M.ty=(v.h-M.ih*M.s)/2;
+    M.pts=[null,null,null,null];M.useMem=M.fwr>0;M.step=M.useMem?2:0;M.img=src;
+    setTab("map");drawMap();
+    if(M.useMem)toast("ใช้กรอบจอที่จำไว้ แตะ ‘ตัวเรา’ แล้ว ‘เป้าหมาย’ ได้เลย · ขยายแผนที่ด้วยสองนิ้วหรือปุ่ม +");
+  };im.src=src;
+}
+window.ddtShot=function(b64){loadShot(b64.indexOf("data:")===0?b64:"data:image/jpeg;base64,"+b64)};
+window.ddtShotFail=function(msg){toast(msg||"แคปจอไม่สำเร็จ")};
+function frameW(){
+  if(M.pts[0]&&M.pts[1]){var fw=Math.abs(M.pts[1][0]-M.pts[0][0]);if(fw>3)return fw}
+  if(M.useMem&&M.fwr>0)return M.fwr*M.iw;return 0;
+}
+function mapResult(){
+  var fw=frameW();if(!fw||!M.pts[2]||!M.pts[3])return null;
+  var k=1000/fw,dx=(M.pts[3][0]-M.pts[2][0])*k,dy=(M.pts[2][1]-M.pts[3][1])*k;return {dx:dx,dy:dy};
+}
+function drawMap(){
+  var im=$("shot"),has=!!M.img;
+  $("mEmpty").style.display=has?"none":"flex";$("mPill").style.display=has?"block":"none";$("mZoom").style.display=has?"flex":"none";
+  im.style.display=has?"block":"none";
+  if(has)im.style.transform="translate("+M.tx+"px,"+M.ty+"px) scale("+M.s+")";
+  $("zLbl").textContent=(M.s/M.s0).toFixed(1).replace(/\.0$/,"")+"×";
+  $("mStepN").textContent=STEPS[M.step].l;
+  $("mks").innerHTML=M.pts.map(function(p,i){if(!p)return"";return '<div class="mk" style="left:'+(M.tx+p[0]*M.s)+'px;top:'+(M.ty+p[1]*M.s)+'px;border-color:'+STEPS[i].c+';color:'+STEPS[i].c+'">'+(i+1)+'</div>'}).join("");
+  $("steps").innerHTML=STEPS.map(function(st,i){
+    var done=!!M.pts[i]||(i<2&&M.useMem&&M.fwr>0&&!M.pts[0]&&!M.pts[1]);
+    var lbl=M.pts[i]?"วางแล้ว":(done?"จำไว้":"ยังไม่วาง");
+    return '<button class="step'+(i===M.step?" on":"")+'" data-st="'+i+'"><i style="border-color:'+st.c+';color:'+st.c+'">'+(i+1)+'</i><span>'+st.l+'</span><em style="color:'+(done?"var(--green)":"var(--l3)")+'">'+lbl+'</em></button>'}).join("");
+  var r=mapResult();
+  if(r){$("oD").textContent=(Math.abs(r.dx)/100).toFixed(1);$("oDL").textContent="ระยะ "+(r.dx>=0?"→":"←");$("oDP").textContent="ช่อง · "+Math.round(Math.abs(r.dx)).toLocaleString("en-US")+" px";$("oH").textContent=(r.dy>=0?"+":"−")+Math.round(Math.abs(r.dy))}
+  else{$("oD").textContent="—";$("oH").textContent="—";$("oDL").textContent="ระยะ";$("oDP").textContent="ช่อง"}
+}
+function placeAt(vx,vy){
+  if(!M.img)return;var x=(vx-M.tx)/M.s,y=(vy-M.ty)/M.s;
+  if(x<0||y<0||x>M.iw||y>M.ih)return;
+  if(M.step<2&&M.useMem){M.useMem=false}
+  M.pts[M.step]=[x,y];
+  if(M.pts[0]&&M.pts[1]){var fw=Math.abs(M.pts[1][0]-M.pts[0][0]);if(fw>3){M.fwr=fw/M.iw;lsSet("ddt_fwr",M.fwr)}}
+  var miss=-1;for(var i=0;i<4;i++){if(!M.pts[i]&&!(i<2&&M.useMem)){miss=i;break}}
+  M.step=miss>=0?miss:Math.min(3,M.step+1);drawMap();
+}
+function zoomAt(f,cx,cy){
+  var ns=Math.max(M.s0,Math.min(M.s0*14,M.s*f));f=ns/M.s;
+  M.tx=cx-(cx-M.tx)*f;M.ty=cy-(cy-M.ty)*f;M.s=ns;clampPan();drawMap();
+}
+function clampPan(){var v=vpSize(),w=M.iw*M.s,h=M.ih*M.s;
+  if(w<=v.w)M.tx=(v.w-w)/2;else M.tx=Math.min(0,Math.max(v.w-w,M.tx));
+  if(h<=v.h)M.ty=(v.h-h)/2;else M.ty=Math.min(0,Math.max(v.h-h,M.ty));}
+(function(){
+  var vp=$("vp"),P={},moved=false,start=null,pinch=null;
+  function loc(e){var r=vp.getBoundingClientRect(),k=r.width/vp.offsetWidth;return [(e.clientX-r.left)/k,(e.clientY-r.top)/k]}
+  vp.addEventListener("pointerdown",function(e){if(!M.img||e.target.closest(".zoom"))return;vp.setPointerCapture(e.pointerId);P[e.pointerId]=loc(e);var ids=Object.keys(P);
+    if(ids.length===1){moved=false;start={p:P[e.pointerId],tx:M.tx,ty:M.ty}}
+    else if(ids.length===2){moved=true;var a=P[ids[0]],b=P[ids[1]];pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1]),s:M.s,tx:M.tx,ty:M.ty,c:[(a[0]+b[0])/2,(a[1]+b[1])/2]}}});
+  vp.addEventListener("pointermove",function(e){if(!P[e.pointerId])return;P[e.pointerId]=loc(e);var ids=Object.keys(P);
+    if(ids.length===1&&start){var p=P[ids[0]],dx=p[0]-start.p[0],dy=p[1]-start.p[1];if(Math.hypot(dx,dy)>8)moved=true;if(moved){M.tx=start.tx+dx;M.ty=start.ty+dy;clampPan();drawMap()}}
+    else if(ids.length===2&&pinch){var a=P[ids[0]],b=P[ids[1]],d=Math.hypot(a[0]-b[0],a[1]-b[1]),c=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+      var ns=Math.max(M.s0,Math.min(M.s0*14,pinch.s*d/pinch.d)),f=ns/pinch.s;M.s=ns;M.tx=c[0]-(pinch.c[0]-pinch.tx)*f;M.ty=c[1]-(pinch.c[1]-pinch.ty)*f;clampPan();drawMap()}});
+  function up(e){if(!P[e.pointerId])return;var p=P[e.pointerId];delete P[e.pointerId];var n=Object.keys(P).length;
+    if(n===0){if(!moved&&start)placeAt(p[0],p[1]);start=null;pinch=null}
+    else if(n===1){pinch=null;var id=Object.keys(P)[0];start={p:P[id],tx:M.tx,ty:M.ty};moved=true}}
+  vp.addEventListener("pointerup",up);vp.addEventListener("pointercancel",up);
+  vp.addEventListener("wheel",function(e){if(!M.img)return;e.preventDefault();var p=loc(e);zoomAt(e.deltaY<0?1.25:0.8,p[0],p[1])},{passive:false});
+})();
+function capture(){
+  if(HOST&&BUBBLE&&HOST.capture){HOST.capture();return}
+  $("fileIn").value="";$("fileIn").click();
+}
+$("fileIn").addEventListener("change",function(){var f=this.files&&this.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(){loadShot(rd.result)};rd.readAsDataURL(f)});
+
+/* ---------- tabs / nav ---------- */
+var tab="calc";
+function setTab(t){tab=t;$("tCalc").classList.toggle("on",t==="calc");$("tMap").classList.toggle("on",t==="map");$("vCalc").classList.toggle("on",t==="calc");$("vMap").classList.toggle("on",t==="map");if(t==="map")drawMap()}
+window.ddtBack=function(){
+  if($("ovSet").classList.contains("on")){$("ovSet").classList.remove("on");return true}
+  if($("ovUp").classList.contains("on")){if(U.phase!=="dl")closeUp();return true}
+  if(tab==="map"){setTab("calc");return true}
+  return false;
+};
+
+/* ---------- update ---------- */
+var U={phase:"idle",info:null,manual:false,auto:lsGet("ddt_auto",true)};
+function curCode(){try{return HOST?+HOST.versionCode():0}catch(e){return 0}}
+function curName(){try{return HOST?HOST.version():"เว็บ"}catch(e){return "?"}}
+function checkUpdate(manual){
+  U.manual=manual;
+  if(!HOST||!HOST.checkUpdate){if(manual)toast("ตรวจอัปเดตได้เฉพาะในแอป");return}
+  if(manual)toast("กำลังตรวจหาเวอร์ชันใหม่…",1500);HOST.checkUpdate();
+}
+window.ddtUpdateInfo=function(txt){
+  var j=null;try{j=JSON.parse(txt)}catch(e){}
+  if(!j||!j.versionCode){if(U.manual)toast("ตรวจอัปเดตไม่สำเร็จ ลองใหม่อีกครั้ง");return}
+  if(+j.versionCode<=curCode()){if(U.manual)toast("เป็นเวอร์ชันล่าสุดแล้ว ("+curName()+")");return}
+  U.info=j;
+  if(!U.manual&&lsGet("ddt_skipver",0)===+j.versionCode){$("ubarT").textContent="มีเวอร์ชันใหม่ "+j.versionName;$("ubar").classList.add("on");return}
+  openUp();
+};
+function openUp(){var j=U.info;if(!j)return;$("ubar").classList.remove("on");U.phase="idle";
+  $("uT").textContent="มีเวอร์ชันใหม่";$("uV").textContent=curName()+" → "+j.versionName+(j.size?" · "+Math.round(j.size/1024)+" KB":"");
+  $("uN").textContent="มีอะไรใหม่\n"+(j.notes||"-");upView();$("ovUp").classList.add("on")}
+function closeUp(){$("ovUp").classList.remove("on")}
+function upView(){$("uDl").style.display=U.phase==="dl"?"flex":"none";$("uBtns").style.display=U.phase==="idle"?"grid":"none";$("uInst").style.display=U.phase==="ready"?"flex":"none";if(U.phase==="ready")$("uT").textContent="ดาวน์โหลดเสร็จแล้ว"}
+window.ddtUpdateProgress=function(p){U.phase="dl";$("uBar").style.width=p+"%";$("uP").textContent="กำลังดาวน์โหลด "+p+"%";upView()};
+window.ddtUpdateDone=function(ok,msg){if(ok){U.phase="ready"}else{U.phase="idle";toast(msg||"ดาวน์โหลดไม่สำเร็จ")}upView()};
+window.ddtInstallMsg=function(msg){toast(msg,5000)};
+
+/* ---------- wiring ---------- */
+buildStatic();
+document.addEventListener("click",function(e){
+  var b=e.target.closest("button");if(!b)return;var d=b.dataset;
+  if(d.k!=null)key(KEYS[+d.k]);
+  else if(d.wi!=null){S.wInt=+d.wi;render()}
+  else if(d.wd!=null){S.wDec=+d.wd;render()}
+  else if(d.sp!=null){S.speed=+d.sp;render()}
+  else if(d.a!=null){S.angle=+d.a;render()}
+  else if(d.st!=null){M.step=+d.st;drawMap()}
+});
+$("fDist").onclick=function(){S.field="dist";render()};$("fH").onclick=function(){S.field="h";render()};
+$("wL").onclick=function(){S.wDir=-1;render()};$("wR").onclick=function(){S.wDir=1;render()};
+$("tCalc").onclick=function(){setTab("calc")};$("tMap").onclick=function(){setTab("map")};
+$("bShot").onclick=capture;$("bShot2").onclick=capture;
+$("zIn").onclick=function(){var v=vpSize();zoomAt(1.6,v.w/2,v.h/2)};$("zOut").onclick=function(){var v=vpSize();zoomAt(1/1.6,v.w/2,v.h/2)};
+$("bUse").onclick=function(){var r=mapResult();if(!r){toast("วางจุดให้ครบก่อน: กรอบจอ · ตัวเรา · เป้าหมาย");return}
+  S.dist=(Math.abs(r.dx)/100).toFixed(1);S.dir=r.dx>=0?1:-1;S.h=String(Math.round(Math.abs(r.dy)));S.hSign=r.dy>=0?1:-1;S.field="dist";setTab("calc");render()};
+$("bSet").onclick=function(){$("sVer").textContent="เวอร์ชัน "+curName();$("sAuto").classList.toggle("on",U.auto);$("ovSet").classList.add("on")};
+$("sClose").onclick=function(){$("ovSet").classList.remove("on")};
+$("sAuto").onclick=function(){U.auto=!U.auto;lsSet("ddt_auto",U.auto);this.classList.toggle("on",U.auto)};
+$("sCheck").onclick=function(){$("ovSet").classList.remove("on");checkUpdate(true)};
+$("sFrame").onclick=function(){M.fwr=0;M.useMem=false;lsSet("ddt_fwr",0);toast("ล้างกรอบแล้ว ครั้งต่อไปให้แตะขอบซ้าย-ขวาของกรอบใหม่")};
+$("ubarB").onclick=openUp;
+$("uLater").onclick=function(){if(U.info)lsSet("ddt_skipver",+U.info.versionCode);closeUp()};
+$("uGo").onclick=function(){if(!HOST)return;U.phase="dl";upView();HOST.downloadUpdate(U.info.apk)};
+$("uInst").onclick=function(){if(HOST)HOST.installUpdate()};
+if(BUBBLE){document.body.classList.add("bubble");$("bClose").style.display="flex";$("bClose").onclick=function(){if(HOST&&HOST.close)HOST.close()};$("bShot2").textContent="แคปจอเกม"}
+else{$("mEmptyT").textContent="เลือกรูปแคปหน้าจอเกม หรือเปิด Bubble แล้วกดแคปจอระหว่างเล่น";$("bShot2").textContent="เลือกรูป";$("bShot").textContent="เลือกรูป";
+  if(HOST&&HOST.toggleBubble){$("bBubble").style.display="flex";$("bBubble").onclick=function(){HOST.toggleBubble()}}}
+render();
+if(!BUBBLE&&U.auto)setTimeout(function(){checkUpdate(false)},1200);
+</script>
+</body>
+</html>
