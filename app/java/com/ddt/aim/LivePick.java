@@ -83,62 +83,100 @@ public class LivePick extends View {
     }
 
     // ---------- auto snap ----------
-    /** Snap to the white frame line (steps 0-1) or to the centre of a vivid dot (steps 2-3). Screen coords. */
+    /** 1 = enemy marker red, 2 = own/ally marker blue, 0 = anything else (the minimap is see-through). */
+    private static int markerClass(int p) {
+        int R = (p >> 16) & 255, G = (p >> 8) & 255, B = p & 255;
+        if (R >= 170 && G <= 90 && B <= 90 && R - Math.max(G, B) >= 110) return 1;
+        if (B >= 150 && R <= 90 && B - R >= 100 && B - G >= 40) return 2;
+        return 0;
+    }
+
+    /**
+     * Steps 0-1: the frame box edge (left = dark->bright, right = bright->dark), x only.
+     * Steps 2-3: centre of the nearest red / blue marker; arrows sitting above a marker are ignored.
+     * Screen coords; null = nothing to snap to.
+     */
     private float[] snap(float x, float y) {
         synchronized (lock) {
             if (frame == null || frameTime < touchStart + 150) return null;   // frame must not contain our own markers
-            int r = Math.round(12 * d);
+            int r = Math.round(14 * d);
             int fw = Math.min(frame.getWidth(), screenW), fh = frame.getHeight();
             int x0 = Math.max(0, Math.round(x) - r), y0 = Math.max(0, Math.round(y) - r);
             int x1 = Math.min(fw - 1, Math.round(x) + r), y1 = Math.min(fh - 1, Math.round(y) + r);
             int w = x1 - x0 + 1, h = y1 - y0 + 1;
-            if (w < 3 || h < 3) return null;
+            if (w < 5 || h < 5) return null;
             if (px.length < w * h) px = new int[w * h];
             frame.getPixels(px, 0, w, x0, y0, w, h);
-            int fx0 = Math.round(x) - x0, fy0 = Math.round(y) - y0;
+            float fx0 = x - x0, fy0 = y - y0;
+
             if (step < 2) {
-                int best = -1, bestN = 0;
-                for (int c = 0; c < w; c++) {
-                    int n = 0;
-                    for (int rr = 0; rr < h; rr++) {
-                        int p = px[rr * w + c], R = (p >> 16) & 255, G = (p >> 8) & 255, B = p & 255;
-                        int mx = Math.max(R, Math.max(G, B)), mn = Math.min(R, Math.min(G, B));
-                        if (mn >= 185 && mx - mn < 45) n++;
-                    }
-                    if (n > bestN || (n == bestN && n > 0 && Math.abs(c - fx0) < Math.abs(best - fx0))) { bestN = n; best = c; }
+                int[] L = new int[w * h];
+                for (int i = 0; i < w * h; i++) {
+                    int p = px[i];
+                    L[i] = (((p >> 16) & 255) * 299 + ((p >> 8) & 255) * 587 + (p & 255) * 114) / 1000;
                 }
-                if (bestN < Math.max(4, h / 4)) return null;
-                return new float[]{x0 + best + 0.5f, y};
+                int sg = step == 0 ? 1 : -1, best = -1;
+                float bs = 0;
+                for (int c = 1; c < w - 1; c++) {
+                    int cnt = 0;
+                    long sum = 0;
+                    for (int rr = 0; rr < h; rr++) {
+                        int g = (L[rr * w + c + 1] - L[rr * w + c - 1]) * sg;
+                        sum += g;
+                        if (g > 8) cnt++;
+                    }
+                    float cons = cnt / (float) h, mag = sum / (float) h;
+                    float sc = mag * cons / (1 + Math.abs(c - fx0) / (r * 0.6f));
+                    if (cons >= 0.5f && mag >= 6 && sc > bs) { bs = sc; best = c; }
+                }
+                return best < 0 ? null : new float[]{x0 + best + 0.5f, y};
             }
-            float[] sc = new float[w * h];
-            for (int i = 0; i < w * h; i++) {
-                int p = px[i], R = (p >> 16) & 255, G = (p >> 8) & 255, B = p & 255;
-                int mx = Math.max(R, Math.max(G, B)), mn = Math.min(R, Math.min(G, B));
-                sc[i] = mx < 60 ? 0 : (mx - mn) / (float) mx * (mx / 255f);
+
+            int n0 = w * h;
+            int[] cls = new int[n0];
+            for (int i = 0; i < n0; i++) cls[i] = markerClass(px[i]);
+            boolean[] seen = new boolean[n0];
+            int[] q = new int[n0];
+            float[][] comps = new float[64][];      // {class, cx, cy}
+            int nc = 0;
+            for (int s0 = 0; s0 < n0 && nc < 64; s0++) {
+                if (cls[s0] == 0 || seen[s0]) continue;
+                int col = cls[s0], qh = 0, qt = 0, n = 0;
+                int bx0 = w, bx1 = -1, by0 = h, by1 = -1;
+                q[qt++] = s0; seen[s0] = true;
+                while (qh < qt) {
+                    int i = q[qh++], cx = i % w, cy = i / w;
+                    n++;
+                    if (cx < bx0) bx0 = cx; if (cx > bx1) bx1 = cx;
+                    if (cy < by0) by0 = cy; if (cy > by1) by1 = cy;
+                    for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+                        int nx = cx + dx, ny = cy + dy;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                        int j = ny * w + nx;
+                        if (!seen[j] && cls[j] == col) { seen[j] = true; q[qt++] = j; }
+                    }
+                }
+                int bw = bx1 - bx0 + 1, bh = by1 - by0 + 1;
+                if (n < 4 || bw > r * 1.5f || bh > r * 1.5f) continue;
+                float ar = bw / (float) bh;
+                if (ar < 0.6f || ar > 1.67f) continue;
+                comps[nc++] = new float[]{col, (bx0 + bx1) / 2f, (by0 + by1) / 2f};
             }
-            final float th = 0.38f;
-            int seed = -1;
-            float bd = Float.MAX_VALUE;
-            for (int i = 0; i < w * h; i++) {
-                if (sc[i] < th) continue;
-                float dx = i % w - fx0, dy = i / w - fy0, dd = dx * dx + dy * dy;
-                if (dd < bd) { bd = dd; seed = i; }
+            int pref = step == 2 ? 2 : 1;
+            float bestCost = Float.MAX_VALUE;
+            float[] pick = null;
+            for (int i = 0; i < nc; i++) {
+                float[] a = comps[i];
+                boolean arrow = false;                // a same-colour marker just below => this is its arrow
+                for (int j = 0; j < nc && !arrow; j++) {
+                    float[] b = comps[j];
+                    if (j != i && b[0] == a[0] && Math.abs(b[1] - a[1]) < 6 * d && b[2] - a[2] > 0 && b[2] - a[2] < 14 * d) arrow = true;
+                }
+                if (arrow) continue;
+                float dd = (float) Math.hypot(a[1] - fx0, a[2] - fy0) * (a[0] == pref ? 1f : 1.6f);
+                if (dd < bestCost) { bestCost = dd; pick = a; }
             }
-            if (seed < 0) return null;
-            // flood fill the dot the seed belongs to
-            boolean[] seen = new boolean[w * h];
-            int[] q = new int[w * h];
-            int qh = 0, qt = 0, n = 0;
-            double sx = 0, sy = 0;
-            q[qt++] = seed; seen[seed] = true;
-            while (qh < qt) {
-                int i = q[qh++], cx = i % w, cy = i / w;
-                n++; sx += cx; sy += cy;
-                int[] nb = {cx > 0 ? i - 1 : -1, cx < w - 1 ? i + 1 : -1, cy > 0 ? i - w : -1, cy < h - 1 ? i + w : -1};
-                for (int j : nb) if (j >= 0 && !seen[j] && sc[j] >= th * 0.7f) { seen[j] = true; q[qt++] = j; }
-            }
-            if (n < 3 || n > w * h * 0.45) return null;     // too tiny = noise, too big = terrain
-            return new float[]{x0 + (float) (sx / n) + 0.5f, y0 + (float) (sy / n) + 0.5f};
+            return pick == null ? null : new float[]{x0 + pick[1] + 0.5f, y0 + pick[2] + 0.5f};
         }
     }
 
