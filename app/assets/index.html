@@ -35,6 +35,9 @@ button:active{filter:brightness(1.35)}
 .chip{height:44px;border-radius:11px;background:var(--g2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
 .chip b{font-size:14px;font-weight:600;line-height:1.2}.chip span{font-size:11px;color:var(--l2);line-height:1.2}
 .chip.on{background:var(--blue)}.chip.on span{color:#fff}
+.mseg{display:flex;padding:2px;border-radius:8px;background:var(--g2);gap:2px}
+.mseg button{height:24px;padding:0 10px;border-radius:6px;background:transparent;font-size:12px;color:var(--l2)}
+.mseg button.on{background:var(--g5);color:#fff;font-weight:600}
 .fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .field{height:64px;border-radius:14px;background:var(--g1);border:2px solid var(--g1);text-align:left;padding:6px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px}
 .field.on{border-color:var(--blue)}
@@ -110,7 +113,7 @@ button:active{filter:brightness(1.35)}
   <div class="view on" id="vCalc">
     <div class="col">
       <div class="card res">
-        <div class="row"><span class="mut" id="rAng">แรง · มุม 45°</span><span id="rStat" style="font-size:12px;font-weight:600"></span></div>
+        <div class="row"><div class="mseg"><button id="mPick">เลือกมุม</button><button id="mHigh" aria-label="มุมสูง แตะซ้ำเพื่อเปลี่ยนแรงหลัก">มุมสูง</button></div><span id="rStat" style="font-size:12px;font-weight:600"></span></div>
         <div style="display:flex;align-items:baseline;gap:10px"><span class="pw" id="rPow">—</span><span class="sub" id="rSub">ใส่ระยะก่อน</span></div>
         <svg width="222" height="54" viewBox="0 0 222 62" preserveAspectRatio="none" aria-hidden="true" style="margin-top:2px"><line x1="0" y1="61" x2="222" y2="61" stroke="#3A3A3C"/><path id="rPath" d="" fill="none" stroke="#0A84FF" stroke-width="2" stroke-dasharray="4 3"/><circle id="rS" r="4" fill="#5AC8FA" cx="-9" cy="-9"/><circle id="rT" r="5" fill="none" stroke="#FF9F0A" stroke-width="2" cx="-9" cy="-9"/></svg>
       </div>
@@ -230,9 +233,10 @@ window.ddtSolve=solve;window.ddtSim=sim;
 
 /* ---------- calc state ---------- */
 var ANGLES=[30,45,50,55,60,65,70,90];
-var S=Object.assign({field:"dist",dist:"",h:"",hSign:1,dir:1,wDir:1,wInt:0,wDec:0,angle:45,speed:3},lsGet("ddt_state",{}));
+var S=Object.assign({field:"dist",dist:"",h:"",hSign:1,dir:1,wDir:1,wInt:0,wDec:0,angle:45,speed:3,mode:"pick",hiBase:95},lsGet("ddt_state",{}));
+var HI={key:"",sel:null};
 S.field="dist";
-function save(){lsSet("ddt_state",{dist:S.dist,h:S.h,hSign:S.hSign,dir:S.dir,wDir:S.wDir,wInt:S.wInt,wDec:S.wDec,angle:S.angle,speed:S.speed})}
+function save(){lsSet("ddt_state",{dist:S.dist,h:S.h,hSign:S.hSign,dir:S.dir,wDir:S.wDir,wInt:S.wInt,wDec:S.wDec,angle:S.angle,speed:S.speed,mode:S.mode,hiBase:S.hiBase})}
 var KEYS=["7","8","9","⌫","4","5","6","C","1","2","3","±",".","0","สลับช่อง","เป้า ⇆"];
 function buildStatic(){
   $("keys").innerHTML=KEYS.map(function(k,i){var op=!/^[0-9.]$/.test(k);return '<button class="key'+(op?" op":"")+(k.length>2?" sm":"")+'" data-k="'+i+'"'+(k==="⌫"?' aria-label="ลบ"':'')+'>'+k+'</button>'}).join("");
@@ -262,14 +266,31 @@ function render(){
   [].forEach.call(document.querySelectorAll("[data-wi]"),function(b){b.classList.toggle("on",+b.dataset.wi===S.wInt)});
   [].forEach.call(document.querySelectorAll("[data-wd]"),function(b){b.classList.toggle("on",+b.dataset.wd===S.wDec)});
   [].forEach.call(document.querySelectorAll("[data-sp]"),function(b){b.classList.toggle("on",+b.dataset.sp===S.speed)});
-  $("chips").innerHTML=ANGLES.map(function(a){var r=has?solve(a,S.dir,wind,tx,ty):null;return '<button class="chip'+(a===S.angle?" on":"")+'" data-a="'+a+'"><b>'+a+'°</b><span>'+(r?r.p+"%"+(r.err>20?" ~":""):"—")+'</span></button>'}).join("");
-  $("rAng").textContent="แรง · มุม "+S.angle+"°";
+  $("mPick").classList.toggle("on",S.mode!=="high");$("mHigh").textContent="มุมสูง";$("mHigh").classList.toggle("on",S.mode==="high");
+  var angles=ANGLES,res={},ang=S.angle;
+  if(S.mode==="high"){
+    /* มุมสูง: แรงหลัก PB (90/95/100) + ลมเฉพาะหลักเต็ม -> หามุม (แบบสูตร 90 - ระยะ ± ลม)
+       แล้วใช้ลมจริงทั้งหมด (รวมเศษ .1-.9) หาแรงที่มุมนั้น = เศษลมไปปรับที่แรง */
+    var PB=S.hiBase||95,wFull=wind,wInt=S.wDir*S.wInt;
+    var a0=Math.max(10,Math.min(90,90-Math.round(dist)));
+    if(has){var be=1e9;for(var a=90;a>=10;a--){var e=sim(PB*20,a,S.dir,wInt,tx,ty,false).best;if(e<be){be=e;a0=a}}}
+    angles=[];for(var i=-1;i<7;i++){var aa=a0-i;if(aa>=1&&aa<=90)angles.push(aa)}
+    if(has)angles.forEach(function(a){res[a]=solve(a,S.dir,wFull,tx,ty)});
+    var key=[S.dist,S.h,S.hSign,S.dir,S.wDir,S.wInt,PB].join("|");
+    if(HI.key!==key){HI.key=key;HI.sel=null}
+    var auto=a0;
+    if(has&&res[a0].err>20){var ord=angles.filter(function(x){return x<a0}).concat(angles.filter(function(x){return x>a0}));
+      for(var q=0;q<ord.length;q++){if(res[ord[q]].err<=20){auto=ord[q];break}}}
+    ang=HI.sel!=null&&angles.indexOf(HI.sel)>=0?HI.sel:auto;
+    $("mHigh").textContent="มุมสูง "+PB;
+  }else if(has){angles.forEach(function(a){res[a]=solve(a,S.dir,wind,tx,ty)})}
+  $("chips").innerHTML=angles.map(function(a){var r=res[a];return '<button class="chip'+(a===ang?" on":"")+'" data-a="'+a+'"><b>'+a+'°</b><span>'+(r?r.p+"%"+(r.err>20?" ~":""):"—")+'</span></button>'}).join("");
   var pw=$("rPow"),st=$("rStat");
   if(!has){pw.textContent="—";pw.style.color="#fff";$("rSub").textContent="ใส่ระยะก่อน";st.textContent="";$("rPath").setAttribute("d","");mv("rS",-9,-9);mv("rT",-9,-9);return}
-  var r=solve(S.angle,S.dir,wind,tx,ty),T=BAR[S.speed-1],hit=r.err<=20,col=hit?"var(--green)":"var(--orange)";
+  var r=res[ang]||solve(ang,S.dir,wind,tx,ty),T=BAR[S.speed-1],hit=r.err<=20,col=hit?"var(--green)":"var(--orange)";
   pw.textContent=r.p+"%";pw.style.color=col;st.textContent=hit?"โดน":"ไม่ถึง ลองมุมอื่น";st.style.color=col;
-  $("rSub").innerHTML="ลอย "+r.t.toFixed(2)+" วิ · ห่าง "+Math.round(r.err)+" px<br>ปล่อยหลอด "+(Math.max(0,r.p-1)/100*T).toFixed(2)+"–"+(r.p/100*T).toFixed(2)+" วิ";
-  var tr=sim(r.p*20,S.angle,S.dir,wind,tx,ty,true),pts=tr.pts.slice(0,tr.bi+2);
+  $("rSub").innerHTML="มุม "+ang+"° · ห่าง "+Math.round(r.err)+" px<br>ปล่อยหลอด "+(Math.max(0,r.p-1)/100*T).toFixed(2)+"–"+(r.p/100*T).toFixed(2)+" วิ";
+  var tr=sim(r.p*20,ang,S.dir,wind,tx,ty,true),pts=tr.pts.slice(0,tr.bi+2);
   var xs=pts.map(function(p){return p[0]}).concat([0,tx]),ys=pts.map(function(p){return p[1]}).concat([0,ty]);
   var x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs),y0=Math.min.apply(null,ys),y1=Math.max.apply(null,ys);
   var k=Math.min(210/Math.max(1,x1-x0),52/Math.max(1,y1-y0)),ox=6+(210-(x1-x0)*k)/2;
@@ -401,10 +422,11 @@ document.addEventListener("click",function(e){
   else if(d.wi!=null){S.wInt=+d.wi;render()}
   else if(d.wd!=null){S.wDec=+d.wd;render()}
   else if(d.sp!=null){S.speed=+d.sp;render()}
-  else if(d.a!=null){S.angle=+d.a;render()}
+  else if(d.a!=null){if(S.mode==="high")HI.sel=+d.a;else S.angle=+d.a;render()}
   else if(d.st!=null){M.step=+d.st;drawMap()}
 });
 $("fDist").onclick=function(){S.field="dist";render()};$("fH").onclick=function(){S.field="h";render()};
+$("mPick").onclick=function(){S.mode="pick";render()};$("mHigh").onclick=function(){if(S.mode==="high"){S.hiBase=S.hiBase===95?100:S.hiBase===100?90:95;toast("แรงหลัก "+S.hiBase+"%",1200)}S.mode="high";HI.key="";render()};
 $("wL").onclick=function(){S.wDir=-1;render()};$("wR").onclick=function(){S.wDir=1;render()};
 $("tCalc").onclick=function(){setTab("calc")};$("tMap").onclick=function(){if(BUBBLE&&HOST&&HOST.pickLive){HOST.pickLive(String(M.fwr||0))}else setTab("map")};
 $("bShot").onclick=capture;$("bShot2").onclick=capture;
