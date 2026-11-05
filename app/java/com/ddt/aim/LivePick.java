@@ -42,6 +42,8 @@ public class LivePick extends View {
 
     private final Object lock = new Object();
     private Bitmap frame;
+    private long frameTime, touchStart;
+    private int[] px = new int[0];
 
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -64,9 +66,69 @@ public class LivePick extends View {
         pix.setFilterBitmap(false);
     }
 
-    public void setFrame(Bitmap b) {
-        synchronized (lock) { frame = b; }
+    public void setFrame(Bitmap b, long t) {
+        synchronized (lock) { frame = b; frameTime = t; }
         postInvalidate();
+    }
+
+    // ---------- auto snap ----------
+    /** Snap to the white frame line (steps 0-1) or to the centre of a vivid dot (steps 2-3). Screen coords. */
+    private float[] snap(float x, float y) {
+        synchronized (lock) {
+            if (frame == null || frameTime < touchStart + 150) return null;   // frame must not contain our own markers
+            int r = Math.round(12 * d);
+            int fw = Math.min(frame.getWidth(), screenW), fh = frame.getHeight();
+            int x0 = Math.max(0, Math.round(x) - r), y0 = Math.max(0, Math.round(y) - r);
+            int x1 = Math.min(fw - 1, Math.round(x) + r), y1 = Math.min(fh - 1, Math.round(y) + r);
+            int w = x1 - x0 + 1, h = y1 - y0 + 1;
+            if (w < 3 || h < 3) return null;
+            if (px.length < w * h) px = new int[w * h];
+            frame.getPixels(px, 0, w, x0, y0, w, h);
+            int fx0 = Math.round(x) - x0, fy0 = Math.round(y) - y0;
+            if (step < 2) {
+                int best = -1, bestN = 0;
+                for (int c = 0; c < w; c++) {
+                    int n = 0;
+                    for (int rr = 0; rr < h; rr++) {
+                        int p = px[rr * w + c], R = (p >> 16) & 255, G = (p >> 8) & 255, B = p & 255;
+                        int mx = Math.max(R, Math.max(G, B)), mn = Math.min(R, Math.min(G, B));
+                        if (mn >= 185 && mx - mn < 45) n++;
+                    }
+                    if (n > bestN || (n == bestN && n > 0 && Math.abs(c - fx0) < Math.abs(best - fx0))) { bestN = n; best = c; }
+                }
+                if (bestN < Math.max(4, h / 4)) return null;
+                return new float[]{x0 + best + 0.5f, y};
+            }
+            float[] sc = new float[w * h];
+            for (int i = 0; i < w * h; i++) {
+                int p = px[i], R = (p >> 16) & 255, G = (p >> 8) & 255, B = p & 255;
+                int mx = Math.max(R, Math.max(G, B)), mn = Math.min(R, Math.min(G, B));
+                sc[i] = mx < 60 ? 0 : (mx - mn) / (float) mx * (mx / 255f);
+            }
+            final float th = 0.38f;
+            int seed = -1;
+            float bd = Float.MAX_VALUE;
+            for (int i = 0; i < w * h; i++) {
+                if (sc[i] < th) continue;
+                float dx = i % w - fx0, dy = i / w - fy0, dd = dx * dx + dy * dy;
+                if (dd < bd) { bd = dd; seed = i; }
+            }
+            if (seed < 0) return null;
+            // flood fill the dot the seed belongs to
+            boolean[] seen = new boolean[w * h];
+            int[] q = new int[w * h];
+            int qh = 0, qt = 0, n = 0;
+            double sx = 0, sy = 0;
+            q[qt++] = seed; seen[seed] = true;
+            while (qh < qt) {
+                int i = q[qh++], cx = i % w, cy = i / w;
+                n++; sx += cx; sy += cy;
+                int[] nb = {cx > 0 ? i - 1 : -1, cx < w - 1 ? i + 1 : -1, cy > 0 ? i - w : -1, cy < h - 1 ? i + w : -1};
+                for (int j : nb) if (j >= 0 && !seen[j] && sc[j] >= th * 0.7f) { seen[j] = true; q[qt++] = j; }
+            }
+            if (n < 3 || n > w * h * 0.45) return null;     // too tiny = noise, too big = terrain
+            return new float[]{x0 + (float) (sx / n) + 0.5f, y0 + (float) (sy / n) + 0.5f};
+        }
     }
 
     public Object lock() { return lock; }
@@ -93,6 +155,7 @@ public class LivePick extends View {
                 if (useMem && bReframe.contains(x, y)) { onButton = true; reframe(); return true; }
                 onButton = false;
                 touching = true;
+                touchStart = android.os.SystemClock.uptimeMillis();
                 fx = x + loc[0]; fy = y + loc[1];
                 invalidate();
                 return true;
@@ -100,7 +163,11 @@ public class LivePick extends View {
                 if (touching) { fx = x + loc[0]; fy = y + loc[1]; invalidate(); }
                 return true;
             case MotionEvent.ACTION_UP:
-                if (touching) { touching = false; place(fx, fy); }
+                if (touching) {
+                    touching = false;
+                    float[] sp = snap(fx, fy);
+                    if (sp != null) place(sp[0], sp[1]); else place(fx, fy);
+                }
                 onButton = false;
                 return true;
             case MotionEvent.ACTION_CANCEL:
@@ -148,8 +215,8 @@ public class LivePick extends View {
         stroke.setStrokeWidth(3 * d);
         c.drawRect(1.5f * d, 1.5f * d, w - 1.5f * d, h - 1.5f * d, stroke);
 
-        // frame edges as vertical guides
-        for (int i = 0; i < 2; i++) {
+        // while a finger is down nothing is drawn over the map: the capture would see it
+        if (!touching) for (int i = 0; i < 2; i++) {
             if (pts[i] == null) continue;
             float x = pts[i][0] - loc[0], y = pts[i][1] - loc[1];
             stroke.setColor(0xCCFFFFFF);
@@ -157,21 +224,12 @@ public class LivePick extends View {
             c.drawLine(x, y - 40 * d, x, y + 40 * d, stroke);
         }
         // markers
-        for (int i = 0; i < 4; i++) {
+        if (!touching) for (int i = 0; i < 4; i++) {
             if (pts[i] == null) continue;
             marker(c, pts[i][0] - loc[0], pts[i][1] - loc[1], i);
         }
 
-        if (touching) {
-            float x = fx - loc[0], y = fy - loc[1];
-            stroke.setColor(COL[step]);
-            stroke.setStrokeWidth(1.5f * d);
-            c.drawLine(x - 18 * d, y, x - 5 * d, y, stroke);
-            c.drawLine(x + 5 * d, y, x + 18 * d, y, stroke);
-            c.drawLine(x, y - 18 * d, x, y - 5 * d, stroke);
-            c.drawLine(x, y + 5 * d, x, y + 18 * d, stroke);
-            loupe(c, x);
-        }
+        if (touching) loupe(c, fx - loc[0]);
         hud(c, w, h);
     }
 
@@ -207,6 +265,14 @@ public class LivePick extends View {
             }
         }
         c.restore();
+        float[] sp = snap(fx, fy);
+        if (sp != null) {
+            float lx = cx + (sp[0] - fx) * ZOOM, ly = cy + (sp[1] - fy) * ZOOM;
+            stroke.setColor(0xFF30D158);
+            stroke.setStrokeWidth(2.5f * d);
+            if (step < 2) c.drawLine(lx, cy - r * 0.8f, lx, cy + r * 0.8f, stroke);
+            else c.drawCircle(lx, ly, 9 * d, stroke);
+        }
         // crosshair in the loupe
         stroke.setColor(0xFF000000);
         stroke.setStrokeWidth(3.5f * d);
@@ -223,7 +289,7 @@ public class LivePick extends View {
         text.setColor(0xFFFFFFFF);
         text.setTextSize(11 * d);
         text.setTextAlign(Paint.Align.CENTER);
-        c.drawText("×4 · ปล่อยนิ้วเพื่อวาง", cx, cy + r + 16 * d, text);
+        c.drawText(sp != null ? "×4 · เขียว = ดูดเข้าจุดนี้" : "×4 · ปล่อยนิ้วเพื่อวาง", cx, cy + r + 16 * d, text);
     }
 
     private void cross(Canvas c, float cx, float cy) {

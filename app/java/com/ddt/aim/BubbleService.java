@@ -7,6 +7,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -27,6 +28,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -42,25 +44,43 @@ import android.widget.Toast;
 
 import java.nio.ByteBuffer;
 
+/**
+ * Bubble overlay.
+ * Ball: tap = live map pick straight away · long-press = full panel · drag onto the bin = close.
+ * HUD: small floating result bar next to the ball (index.html?hud=1), game stays touchable.
+ */
 public class BubbleService extends Service implements Bridge.Host {
     static boolean running = false;
     private static final int NID = 41;
     private static final String CH = "bubble";
+    private static final int BALL_DP = 56, HUD_W = 330, HUD_H = 132;
 
     private WindowManager wm;
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    private SharedPreferences prefs;
+
     private ImageView ball;
     private WindowManager.LayoutParams ballLp;
+    private TrashView trash;
+    private WindowManager.LayoutParams trashLp;
+
+    private FrameLayout hud;
+    private WebView hudWeb;
+    private WindowManager.LayoutParams hudLp;
+    private boolean hudShown = false;
+
     private Panel panel;
     private WebView panelWeb;
     private View closeBtn;
-    private final Handler ui = new Handler(Looper.getMainLooper());
 
     private MediaProjection proj;
     private boolean fgMedia = false;
     private float pendingPick = -1;
+    private boolean pendingToHud = false;
 
     // live pick
     private LivePick pick;
+    private boolean pickToHud = false;
     private HandlerThread capThread;
     private ImageReader reader;
     private VirtualDisplay vd;
@@ -68,7 +88,7 @@ public class BubbleService extends Service implements Bridge.Host {
     private int bufIdx = 0;
     private long lastFrame = 0;
 
-    /** Panel container that hands the Back key to the page. */
+    // ---------- small views ----------
     private class Panel extends FrameLayout {
         Panel(Context c) { super(c); }
 
@@ -87,7 +107,6 @@ public class BubbleService extends Service implements Bridge.Host {
         }
     }
 
-    /** Native close button drawn exactly over the page's ✕ slot — works even if the page misbehaves. */
     private class CloseBtn extends View {
         final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         CloseBtn(Context c) { super(c); }
@@ -108,6 +127,33 @@ public class BubbleService extends Service implements Bridge.Host {
         }
     }
 
+    /** Bin at the bottom centre while the ball is dragged. */
+    private class TrashView extends View {
+        final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+        boolean hot;
+        TrashView(Context c) { super(c); }
+
+        void setHot(boolean h) { if (h != hot) { hot = h; invalidate(); if (h) performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); } }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            float w = getWidth(), r = w / 2 - dp(2);
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(hot ? 0xF0FF453A : 0xD02C2C2E);
+            c.drawCircle(w / 2, w / 2, hot ? r : r * 0.86f, p);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(dp(2.2f));
+            p.setStrokeCap(Paint.Cap.ROUND);
+            p.setColor(Color.WHITE);
+            float cx = w / 2, cy = w / 2, s = w * 0.17f;
+            c.drawLine(cx - s * 1.15f, cy - s * 0.85f, cx + s * 1.15f, cy - s * 0.85f, p);   // lid
+            c.drawLine(cx - s * 0.35f, cy - s * 1.15f, cx + s * 0.35f, cy - s * 1.15f, p);   // handle
+            c.drawLine(cx - s * 0.85f, cy - s * 0.6f, cx - s * 0.65f, cy + s * 1.2f, p);     // can
+            c.drawLine(cx + s * 0.85f, cy - s * 0.6f, cx + s * 0.65f, cy + s * 1.2f, p);
+            c.drawLine(cx - s * 0.65f, cy + s * 1.2f, cx + s * 0.65f, cy + s * 1.2f, p);
+        }
+    }
+
     @Override
     public IBinder onBind(Intent i) { return null; }
 
@@ -121,6 +167,12 @@ public class BubbleService extends Service implements Bridge.Host {
     private static void cutout(WindowManager.LayoutParams lp) {
         if (Build.VERSION.SDK_INT >= 28)
             lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+    }
+
+    private DisplayMetrics real() {
+        DisplayMetrics m = new DisplayMetrics();
+        wm.getDefaultDisplay().getRealMetrics(m);
+        return m;
     }
 
     @SuppressWarnings("deprecation")
@@ -137,7 +189,7 @@ public class BubbleService extends Service implements Bridge.Host {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), fl);
         return b.setSmallIcon(R.drawable.ic_launcher)
                 .setContentTitle("DDT แรงยิง")
-                .setContentText("Bubble เปิดอยู่ · กดค้างที่ลูกบอลเพื่อปิด")
+                .setContentText("Bubble เปิดอยู่ · ลากลูกบอลไปที่ถังขยะเพื่อปิด")
                 .setContentIntent(open)
                 .setOngoing(true)
                 .build();
@@ -149,7 +201,9 @@ public class BubbleService extends Service implements Bridge.Host {
         CrashLog.install(this);
         running = true;
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        prefs = getSharedPreferences("ddt", MODE_PRIVATE);
         try {
+            addHud();
             addBall();
         } catch (Throwable t) {
             CrashLog.note("addBall", t);
@@ -168,18 +222,15 @@ public class BubbleService extends Service implements Bridge.Host {
                 if ("cap".equals(a)) {
                     if (proj != null && pendingPick >= 0) {
                         final float f = pendingPick;
+                        final boolean toHud = pendingToHud;
                         pendingPick = -1;
-                        ui.postDelayed(new Runnable() { public void run() { startPick(f); } }, 400);
+                        ui.postDelayed(new Runnable() { public void run() { startPick(f, toHud); } }, 400);
                     } else if (proj == null) {
-                        pendingPick = -1;
-                        showPanel();
-                        Updater.js(panelWeb, "ddtShotFail('จับภาพหน้าจอไม่ได้')");
+                        pickFailed("จับภาพหน้าจอไม่ได้");
                     }
                 }
             } else if ("capfail".equals(a)) {
-                pendingPick = -1;
-                showPanel();
-                Updater.js(panelWeb, "ddtShotFail('ไม่ได้อนุญาตให้จับภาพหน้าจอ')");
+                pickFailed("ไม่ได้อนุญาตให้จับภาพหน้าจอ");
             } else {
                 goForeground(0, null);
             }
@@ -187,6 +238,17 @@ public class BubbleService extends Service implements Bridge.Host {
             CrashLog.note("onStartCommand", t);
         }
         return START_STICKY;
+    }
+
+    private void pickFailed(String msg) {
+        pendingPick = -1;
+        if (pendingToHud) {
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+            if (hudShown) setHudVisible(true);
+        } else {
+            showPanel();
+            Updater.js(panelWeb, "ddtShotFail(" + org.json.JSONObject.quote(msg) + ")");
+        }
     }
 
     private void goForeground(int code, Intent data) {
@@ -219,47 +281,64 @@ public class BubbleService extends Service implements Bridge.Host {
         ball = new ImageView(this);
         ball.setImageResource(R.drawable.ball);
         ball.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        int sz = dp(56);
+        ball.setContentDescription("DDT แรงยิง: แตะเพื่อวัดจากแผนที่ กดค้างเพื่อเปิดแผง");
+        int sz = dp(BALL_DP);
         ballLp = new WindowManager.LayoutParams(sz, sz, overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
         ballLp.gravity = Gravity.TOP | Gravity.LEFT;
         DisplayMetrics m = getResources().getDisplayMetrics();
-        ballLp.x = m.widthPixels - sz - dp(8);
-        ballLp.y = m.heightPixels / 3;
+        ballLp.x = prefs.getInt("ballX", m.widthPixels - sz - dp(8));
+        ballLp.y = prefs.getInt("ballY", m.heightPixels / 3);
         ball.setOnTouchListener(new View.OnTouchListener() {
             float sx, sy;
             int ox, oy;
-            boolean moved;
+            boolean moved, longDone;
             final Runnable longPress = new Runnable() {
                 public void run() {
-                    moved = true;
-                    Toast.makeText(BubbleService.this, "ปิด Bubble แล้ว", Toast.LENGTH_SHORT).show();
-                    stopSelf();
+                    longDone = true;
+                    ball.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                    try { expand(); } catch (Throwable t) { CrashLog.note("expand", t); collapse(); }
                 }
             };
 
             public boolean onTouch(View v, MotionEvent e) {
                 switch (e.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        sx = e.getRawX(); sy = e.getRawY(); ox = ballLp.x; oy = ballLp.y; moved = false;
-                        ui.postDelayed(longPress, 800);
+                        sx = e.getRawX(); sy = e.getRawY(); ox = ballLp.x; oy = ballLp.y;
+                        moved = false; longDone = false;
+                        ui.postDelayed(longPress, 550);
                         return true;
                     case MotionEvent.ACTION_MOVE:
+                        if (longDone) return true;
                         float dx = e.getRawX() - sx, dy = e.getRawY() - sy;
-                        if (!moved && Math.hypot(dx, dy) > dp(8)) { moved = true; ui.removeCallbacks(longPress); }
+                        if (!moved && Math.hypot(dx, dy) > dp(8)) {
+                            moved = true;
+                            ui.removeCallbacks(longPress);
+                            showTrash(true);
+                        }
                         if (moved && ball != null) {
                             ballLp.x = ox + (int) dx; ballLp.y = oy + (int) dy;
                             try { wm.updateViewLayout(ball, ballLp); } catch (Exception ignored) { }
+                            trash.setHot(overTrash());
+                            placeHud();
                         }
                         return true;
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL:
                         ui.removeCallbacks(longPress);
-                        if (ball == null) return true;
-                        if (moved) snap();
-                        else if (e.getAction() == MotionEvent.ACTION_UP) {
-                            try { expand(); } catch (Throwable t) { CrashLog.note("expand", t); collapse(); }
+                        if (ball == null || longDone) return true;
+                        if (moved) {
+                            boolean bin = overTrash();
+                            showTrash(false);
+                            if (bin) {
+                                Toast.makeText(BubbleService.this, "ปิด Bubble แล้ว", Toast.LENGTH_SHORT).show();
+                                stopSelf();
+                            } else {
+                                snap();
+                            }
+                        } else if (e.getAction() == MotionEvent.ACTION_UP) {
+                            onBallTap();
                         }
                         return true;
                 }
@@ -267,20 +346,128 @@ public class BubbleService extends Service implements Bridge.Host {
             }
         });
         wm.addView(ball, ballLp);
+
+        trash = new TrashView(this);
+        int ts = dp(68);
+        trashLp = new WindowManager.LayoutParams(ts, ts, overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        trashLp.gravity = Gravity.TOP | Gravity.LEFT;
+        trash.setVisibility(View.GONE);
+        wm.addView(trash, trashLp);
+    }
+
+    private void showTrash(boolean on) {
+        if (trash == null) return;
+        if (on) {
+            DisplayMetrics m = real();
+            int ts = dp(68);
+            trashLp.x = (m.widthPixels - ts) / 2;
+            trashLp.y = m.heightPixels - ts - dp(20);
+            try { wm.updateViewLayout(trash, trashLp); } catch (Exception ignored) { }
+            trash.setHot(false);
+        }
+        trash.setVisibility(on ? View.VISIBLE : View.GONE);
+    }
+
+    private boolean overTrash() {
+        if (trash == null || trash.getVisibility() != View.VISIBLE) return false;
+        int bs = dp(BALL_DP), ts = dp(68);
+        float bx = ballLp.x + bs / 2f, by = ballLp.y + bs / 2f;
+        float tx = trashLp.x + ts / 2f, ty = trashLp.y + ts / 2f;
+        return Math.hypot(bx - tx, by - ty) < dp(64);
     }
 
     private void snap() {
-        DisplayMetrics m = getResources().getDisplayMetrics();
-        int sz = dp(56);
+        DisplayMetrics m = real();
+        int sz = dp(BALL_DP);
         ballLp.x = (ballLp.x + sz / 2 < m.widthPixels / 2) ? dp(4) : m.widthPixels - sz - dp(4);
         ballLp.y = Math.max(0, Math.min(m.heightPixels - sz, ballLp.y));
         try { wm.updateViewLayout(ball, ballLp); } catch (Exception ignored) { }
+        prefs.edit().putInt("ballX", ballLp.x).putInt("ballY", ballLp.y).apply();
+        placeHud();
     }
 
-    // ---------- panel ----------
+    private void onBallTap() {
+        if (pick != null) return;
+        pickToHudStart(prefs.getFloat("fwr", 0));
+    }
+
+    // ---------- HUD ----------
+    private void addHud() {
+        hud = new FrameLayout(this);
+        hudWeb = new WebView(this);
+        hudWeb.setBackgroundColor(Color.TRANSPARENT);
+        WebSettings s = hudWeb.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setAllowFileAccess(true);
+        hudWeb.addJavascriptInterface(new Bridge(this, hudWeb, new Bridge.Host() {
+            public void toggleBubble() { stopSelf(); }
+            public void close() { hudShown = false; setHudVisible(false); }
+            public void capture() { onBallTap(); }
+            public void pickLive(float fwr) { onBallTap(); }
+            public void openPanel() { try { expand(); } catch (Throwable t) { CrashLog.note("expand", t); collapse(); } }
+        }), "DDT");
+        hudWeb.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail d) {
+                ui.post(new Runnable() { public void run() { rebuildHud(); } });
+                return true;
+            }
+        });
+        hud.addView(hudWeb, new FrameLayout.LayoutParams(-1, -1));
+        hudLp = new WindowManager.LayoutParams(dp(HUD_W), dp(HUD_H), overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                PixelFormat.TRANSLUCENT);
+        hudLp.gravity = Gravity.TOP | Gravity.LEFT;
+        hud.setVisibility(View.INVISIBLE);
+        wm.addView(hud, hudLp);
+        hudWeb.loadUrl("file:///android_asset/index.html?hud=1");
+    }
+
+    private void rebuildHud() {
+        boolean was = hudShown;
+        try { wm.removeView(hud); } catch (Exception ignored) { }
+        try { hudWeb.destroy(); } catch (Exception ignored) { }
+        hud = null; hudWeb = null;
+        addHud();
+        if (was) { hudShown = true; setHudVisible(true); }
+    }
+
+    /** Hidden HUD stays loaded but lets touches through to the game. */
+    private void setHudVisible(boolean on) {
+        if (hud == null) return;
+        if (on) hudLp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        else hudLp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        placeHudLp();
+        try { wm.updateViewLayout(hud, hudLp); } catch (Exception ignored) { }
+        hud.setVisibility(on ? View.VISIBLE : View.INVISIBLE);
+    }
+
+    private void placeHudLp() {
+        if (ballLp == null) return;
+        DisplayMetrics m = real();
+        int bs = dp(BALL_DP), hw = dp(HUD_W), hh = dp(HUD_H), g = dp(8);
+        boolean right = ballLp.x + bs / 2 > m.widthPixels / 2;
+        hudLp.x = right ? ballLp.x - hw - g : ballLp.x + bs + g;
+        hudLp.x = Math.max(0, Math.min(m.widthPixels - hw, hudLp.x));
+        hudLp.y = Math.max(0, Math.min(m.heightPixels - hh, ballLp.y + bs / 2 - hh / 2));
+    }
+
+    private void placeHud() {
+        if (hud == null || hud.getVisibility() != View.VISIBLE) return;
+        placeHudLp();
+        try { wm.updateViewLayout(hud, hudLp); } catch (Exception ignored) { }
+    }
+
+    // ---------- full panel ----------
     private void expand() {
-        if (panel != null) return;
+        if (panel != null || pick != null) return;
         ball.setVisibility(View.GONE);
+        setHudVisible(false);
         panel = new Panel(this);
         panel.setBackgroundColor(Color.TRANSPARENT);
         panelWeb = new WebView(this);
@@ -338,12 +525,14 @@ public class BubbleService extends Service implements Bridge.Host {
     }
 
     private void collapse() {
-        if (pick != null) endPick(false, null);
+        if (pick != null) endPick(null);
         if (panel != null) {
             try { wm.removeView(panel); } catch (Exception ignored) { }
             if (panelWeb != null) { try { panelWeb.destroy(); } catch (Exception ignored) { } panelWeb = null; }
             panel = null;
             closeBtn = null;
+            Updater.js(hudWeb, "window.ddtReload&&ddtReload()");   // pick up changes made in the panel
+            if (hudShown) setHudVisible(true);
         }
         if (ball != null) ball.setVisibility(View.VISIBLE);
     }
@@ -359,26 +548,38 @@ public class BubbleService extends Service implements Bridge.Host {
     public void close() { collapse(); }
 
     @Override
-    public void capture() { pickLive(0); }
+    public void capture() { pickLive(prefs.getFloat("fwr", 0)); }
+
+    @Override
+    public void openPanel() { }
 
     // ---------- live map pick ----------
+    /** From the full panel's map tab: result goes back to the panel. */
     @Override
-    public void pickLive(float fwr) {
+    public void pickLive(float fwr) { requestPick(fwr, false); }
+
+    /** From the ball: result goes to the floating HUD. */
+    private void pickToHudStart(float fwr) { requestPick(fwr, true); }
+
+    private void requestPick(float fwr, boolean toHud) {
         if (pick != null) return;
         hidePanel();
+        setHudVisible(false);
         if (proj == null) {
             pendingPick = fwr;
+            pendingToHud = toHud;
             Intent i = new Intent(this, ScreenCapActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             startActivity(i);
             return;
         }
-        ui.postDelayed(new Runnable() { public void run() { startPick(fwr); } }, 150);
+        final float f = fwr;
+        final boolean h = toHud;
+        ui.postDelayed(new Runnable() { public void run() { startPick(f, h); } }, toHud ? 30 : 150);
     }
 
-    private void startPick(float fwr) {
-        DisplayMetrics m = new DisplayMetrics();
-        wm.getDefaultDisplay().getRealMetrics(m);
+    private void startPick(final float fwr, final boolean toHud) {
+        DisplayMetrics m = real();
         final int w = m.widthPixels, h = m.heightPixels;
         try {
             capThread = new HandlerThread("ddt-cap");
@@ -394,14 +595,16 @@ public class BubbleService extends Service implements Bridge.Host {
             CrashLog.note("startPick", t);
             stopCapture();
             proj = null;                 // token unusable: ask again
-            pickLive(fwr);
+            requestPick(fwr, toHud);
             return;
         }
+        pickToHud = toHud;
         pick = new LivePick(this, fwr, w, new LivePick.Cb() {
             public void done(float fw, float sx, float sy, float tx, float ty, int sw) {
-                endPick(true, "ddtPickDone(" + fw + "," + sx + "," + sy + "," + tx + "," + ty + "," + sw + ")");
+                if (sw > 0 && fw > 3) prefs.edit().putFloat("fwr", fw / sw).apply();
+                endPick("ddtPickDone(" + fw + "," + sx + "," + sy + "," + tx + "," + ty + "," + sw + ")");
             }
-            public void cancel() { endPick(false, null); }
+            public void cancel() { endPick(null); }
         });
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(-1, -1, overlayType(),
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
@@ -411,6 +614,7 @@ public class BubbleService extends Service implements Bridge.Host {
         cutout(lp);
         wm.addView(pick, lp);
         pick.requestFocus();
+        if (ball != null) ball.setVisibility(View.INVISIBLE);   // keep the ball off the minimap while picking
     }
 
     private void onFrame(ImageReader r, int w, int h) {
@@ -433,7 +637,7 @@ public class BubbleService extends Service implements Bridge.Host {
             buf.rewind();
             synchronized (p.lock()) { b.copyPixelsFromBuffer(buf); }
             bufIdx ^= 1;
-            p.setFrame(b);
+            p.setFrame(b, now);
         } catch (Throwable t) {
             CrashLog.note("frame", t);
         } finally {
@@ -448,21 +652,35 @@ public class BubbleService extends Service implements Bridge.Host {
         bufs = new Bitmap[2];
     }
 
-    private void endPick(boolean ok, String js) {
+    private void endPick(String js) {
         if (pick != null) {
             try { wm.removeView(pick); } catch (Exception ignored) { }
             pick = null;
         }
         stopCapture();
-        showPanel();
-        if (js != null) Updater.js(panelWeb, js);
+        if (ball != null && panel == null) ball.setVisibility(View.VISIBLE);
+        if (pickToHud) {
+            if (js != null) {
+                Updater.js(hudWeb, js);
+                hudShown = true;
+            }
+            if (hudShown) setHudVisible(true);
+        } else {
+            showPanel();
+            if (js != null) Updater.js(panelWeb, js);
+        }
     }
 
     @Override
     public void onDestroy() {
         running = false;
         collapse();
-        if (ball != null) { try { wm.removeView(ball); } catch (Exception ignored) { } ball = null; }
+        if (pick != null) endPick(null);
+        for (View v : new View[]{ball, trash, hud}) {
+            if (v != null) { try { wm.removeView(v); } catch (Exception ignored) { } }
+        }
+        if (hudWeb != null) { try { hudWeb.destroy(); } catch (Exception ignored) { } }
+        ball = null; trash = null; hud = null; hudWeb = null;
         if (proj != null) { try { proj.stop(); } catch (Exception ignored) { } proj = null; }
         super.onDestroy();
     }

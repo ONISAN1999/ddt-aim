@@ -170,6 +170,9 @@ public class MainActivity extends Activity implements Bridge.Host {
     public void pickLive(float fwr) { }
 
     @Override
+    public void openPanel() { }
+
+    @Override
     protected void onDestroy() {
         if (web != null) web.destroy();
         super.onDestroy();

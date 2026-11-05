@@ -89,6 +89,18 @@ button:active{filter:brightness(1.35)}
 .sw.on{background:var(--green);justify-content:flex-end}
 .sw span{width:27px;height:27px;border-radius:14px;background:#fff;display:block}
 .link{background:transparent;color:var(--blue);font-size:15px;width:100%;height:48px;text-align:left;padding:0 14px}
+body.hud{background:transparent}body.hud #stage{display:none}
+#hud{position:fixed;inset:0;background:rgba(28,28,30,.94);border-radius:16px;padding:6px;display:none;flex-direction:column;gap:4px;border:.5px solid rgba(255,255,255,.14)}
+body.hud #hud{display:flex}
+.hr1{height:44px;display:flex;gap:4px;align-items:stretch}
+.hres{flex:1;min-width:0;background:transparent;text-align:left;display:flex;flex-direction:column;justify-content:center;padding:0 6px;border-radius:10px}
+.hres b{font-size:22px;font-weight:700;line-height:1.1;white-space:nowrap}
+.hres span{font-size:10px;color:var(--l2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb{min-width:40px;border-radius:10px;background:var(--g2);font-size:12px;padding:0 8px;white-space:nowrap}
+.hr2,.hr3{height:34px;display:grid;gap:3px}
+.hr2{grid-template-columns:repeat(8,minmax(0,1fr))}.hr3{grid-template-columns:repeat(10,minmax(0,1fr))}
+.hk{border-radius:8px;background:var(--g2);font-size:14px;font-weight:600}
+.hk.on{background:var(--blue)}.hk.dir.on{background:var(--g5)}
 #toast{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);max-width:520px;padding:10px 16px;border-radius:14px;background:rgba(58,58,60,.97);font-size:13px;line-height:1.5;text-align:center;display:none;z-index:9}
 .ubar{position:absolute;left:50%;top:6px;transform:translateX(-50%);display:none;align-items:center;gap:10px;padding:6px 8px 6px 14px;border-radius:14px;background:rgba(44,44,46,.97);font-size:13px;z-index:4}
 .ubar.on{display:flex}
@@ -199,13 +211,23 @@ button:active{filter:brightness(1.35)}
   <div id="toast"></div>
 </div>
 
+<div id="hud">
+  <div class="hr1">
+    <button class="hres" id="hRes" aria-label="เปิดแผงเต็ม"><b id="hBig">—</b><span id="hSub">แตะลูกบอล แล้วแตะ ตัวเรา → เป้า</span></button>
+    <button class="hb" id="hMode">มุมสูง</button>
+    <button class="hb" id="hX" aria-label="ซ่อนแถบผล">✕</button>
+  </div>
+  <div class="hr2" id="hW1"></div>
+  <div class="hr3" id="hW2"></div>
+</div>
 <input type="file" id="fileIn" accept="image/*" style="display:none">
 
 <script>
 "use strict";
 var $=function(id){return document.getElementById(id)};
 var HOST=window.DDT||null;
-var BUBBLE=/[?&]bubble=1/.test(location.search);
+var BUBBLE=/[?&]bubble=1/.test(location.search),HUD=/[?&]hud=1/.test(location.search);
+var LAST={has:false};
 var W=844,H=390;
 function fit(){var s=Math.min(innerWidth/W,innerHeight/H),st=$("stage");st.style.transform="translate("+((innerWidth-W*s)/2)+"px,"+((innerHeight-H*s)/2)+"px) scale("+s+")";}
 addEventListener("resize",fit);fit();
@@ -298,7 +320,7 @@ function render(){
   }else if(has){angles.forEach(function(a){res[a]=solve(a,S.dir,wind,tx,ty)})}
   $("chips").innerHTML=angles.map(function(a){var r=res[a];return '<button class="chip'+(a===ang?" on":"")+'" data-a="'+a+'"><b>'+a+'°</b><span>'+(r?r.p+"%"+(r.err>20?" ~":""):"—")+'</span></button>'}).join("");
   var pw=$("rPow"),st=$("rStat");
-  if(!has){pw.textContent="—";pw.style.color="#fff";$("rSub").textContent="ใส่ระยะก่อน";st.textContent="";$("rPath").setAttribute("d","");mv("rS",-9,-9);mv("rT",-9,-9);return}
+  if(!has){LAST={has:false};if(HUD)hudRender();pw.textContent="—";pw.style.color="#fff";$("rSub").textContent="ใส่ระยะก่อน";st.textContent="";$("rPath").setAttribute("d","");mv("rS",-9,-9);mv("rT",-9,-9);return}
   var r=res[ang]||solve(ang,FACE,wind,tx,ty),T=BAR[S.speed-1],hit=r.err<=20,col=hit?"var(--green)":"var(--orange)";
   pw.textContent=r.p+"%";pw.style.color=col;st.textContent=hit?"โดน":"ไม่ถึง ลองมุมอื่น";st.style.color=col;
   $("rSub").innerHTML='<b style="color:#fff;font-size:12px">มุม '+ang+'°'+(back?' · หันหนีเป้า':'')+'</b>'+(S.mode==="high"?' <span style="font-size:10px">('+HI.wTxt+')</span>':'')+'<br><span style="color:'+col+'">'+(hit?"โดน":"ไม่ถึง")+'</span> · ห่าง '+Math.round(r.err)+" px<br>ปล่อยหลอด "+(Math.max(0,r.p-1)/100*T).toFixed(2)+"–"+(r.p/100*T).toFixed(2)+" วิ";
@@ -309,6 +331,7 @@ function render(){
   var X=function(x){return (ox+(x-x0)*k).toFixed(1)},Y=function(y){return (57-(y-y0)*k).toFixed(1)};
   $("rPath").setAttribute("d",pts.map(function(p,i){return (i?"L":"M")+X(p[0])+" "+Y(p[1])}).join(" "));
   mv("rS",X(0),Y(0));mv("rT",X(tx),Y(ty));
+  LAST={has:true,ang:ang,p:r.p,hit:hit,err:r.err,back:back};if(HUD)hudRender();
 }
 function mv(id,x,y){$(id).setAttribute("cx",x);$(id).setAttribute("cy",y)}
 
@@ -470,9 +493,28 @@ window.ddtPickDone=function(fw,sx,sy,tx,ty,sw){
   setTab("calc");render();
   toast("ระยะ "+S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · ต่างระดับ "+(S.hSign>0?"+":"−")+S.h+" px",2600);
 };
+/* ---------- HUD (แถบผลลอยข้างลูกบอล) ---------- */
+function modeLabel(){return S.mode!=="high"?"เลือกมุม "+S.angle+"°":S.back?"กลับหัว":"มุมสูง "+(S.hiBase||95)}
+function hudRender(){
+  var big=$("hBig"),sub=$("hSub");
+  if(!LAST.has){big.textContent="—";big.style.color="#fff";sub.textContent="แตะลูกบอล แล้วแตะ ตัวเรา → เป้า"}
+  else{big.textContent=LAST.ang+"° · "+LAST.p+"%";big.style.color=LAST.hit?"var(--green)":"var(--orange)";
+    sub.textContent=S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px"+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(LAST.hit?"":" · ไม่ถึง")}
+  $("hMode").textContent=modeLabel();
+  $("hW1").innerHTML='<button class="hk dir'+(S.wDir<0?" on":"")+'" data-hd="-1" aria-label="ลมพัดซ้าย">←</button><button class="hk dir'+(S.wDir>0?" on":"")+'" data-hd="1" aria-label="ลมพัดขวา">→</button>'+
+    [0,1,2,3,4,5].map(function(n){return '<button class="hk'+(n===S.wInt?" on":"")+'" data-wi="'+n+'">'+n+'</button>'}).join("");
+  $("hW2").innerHTML=[0,1,2,3,4,5,6,7,8,9].map(function(n){return '<button class="hk'+(n===S.wDec?" on":"")+'" data-wd="'+n+'">.'+n+'</button>'}).join("");
+}
+window.ddtReload=function(){S=Object.assign(S,lsGet("ddt_state",{}));S.field="dist";M.fwr=lsGet("ddt_fwr",0);HI.key="";render()};
+if(HUD){document.body.classList.add("hud");
+  document.addEventListener("click",function(e){var b=e.target.closest("[data-hd]");if(b){S.wDir=+b.dataset.hd;render()}});
+  $("hRes").onclick=function(){if(HOST&&HOST.openPanel)HOST.openPanel()};
+  $("hX").onclick=function(){if(HOST&&HOST.close)HOST.close()};
+  $("hMode").onclick=function(){if(S.mode!=="high"){S.mode="high";S.back=false}else if(!S.back){S.back=true}else{S.mode="pick";S.back=false}HI.key="";render()};
+}
 render();
-if(!BUBBLE&&lastErr())setTimeout(function(){toast("แอปเคยเกิดข้อผิดพลาด ดูรายละเอียดใน ตั้งค่า (เฟือง)",4000)},600);
-if(!BUBBLE&&U.auto)setTimeout(function(){checkUpdate(false)},1200);
+if(!BUBBLE&&!HUD&&lastErr())setTimeout(function(){toast("แอปเคยเกิดข้อผิดพลาด ดูรายละเอียดใน ตั้งค่า (เฟือง)",4000)},600);
+if(!BUBBLE&&!HUD&&U.auto)setTimeout(function(){checkUpdate(false)},1200);
 </script>
 </body>
 </html>

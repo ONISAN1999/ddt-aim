@@ -12,6 +12,7 @@ public class Bridge {
         void close();
         void capture();
         void pickLive(float fwr);
+        void openPanel();
     }
 
     private final Context ctx;
@@ -72,6 +73,11 @@ public class Bridge {
                 if (host != null) host.close();
             }
         });
+    }
+
+    @JavascriptInterface
+    public void openPanel() {
+        if (host != null) onUi(new Runnable() { public void run() { host.openPanel(); } });
     }
 
     @JavascriptInterface
