@@ -273,15 +273,21 @@ function render(){
   if(S.mode==="high"){
     /* มุมสูง: แรงหลัก PB (90/95/100) + ลมเฉพาะหลักเต็ม -> หามุม (แบบสูตร 90 - ระยะ ± ลม)
        แล้วใช้ลมจริงทั้งหมด (รวมเศษ .1-.9) หาแรงที่มุมนั้น = เศษลมไปปรับที่แรง */
-    var PB=S.hiBase||95,wFull=wind,wInt=S.wDir*S.wInt;
+    var PB=S.hiBase||95,wFull=wind;
+    /* ปัดลมแบบบทความสูตร 90: ทีละ 0.5 (= 1°) · เศษ .1 ไม่คิด · เศษ .4 ปัดขึ้น
+       เศษ .2/.3: ลมตามปัดลง ลมสวนปัดขึ้น -> ส่วนที่เหลือทำให้ "ลดแรง" เสมอ */
+    var wt=wind*S.dir,aw=Math.abs(wt),wb=Math.floor(aw*2+1e-9)/2,wr0=Math.round((aw-wb)*10),wr;
+    if(wr0<=1)wr=wb;else if(wr0>=4)wr=wb+0.5;else wr=wt>=0?wb:wb+0.5;
+    var wInt=(wt>=0?1:-1)*wr*S.dir;
+    HI.wTxt=wr>0?"คิด"+(wt>=0?"ลมตาม ":"ลมสวน ")+wr.toFixed(1):"ไม่คิดลม";
     /* กลับหัว: ตัวละครหันหนีเป้า (FACE = -ทิศเป้า) ใช้มุมบนจอเกิน 90° -> กระสุนตีลังกาไปข้างหลัง
        STEP = ทิศที่มุมห่างจาก 90 (ไกลขึ้น): ปกติ -1, กลับหัว +1 */
-    var STEP=back?1:-1,lo=back?90:10,hi=back?170:90;
+    var STEP=back?1:-1,lo=45,hi=back?170:135;
     var a0=Math.max(lo,Math.min(hi,90-STEP*Math.round(dist)));
     if(has){var be=1e9;for(var a=lo;a<=hi;a++){var e=sim(PB*20,a,FACE,wInt,tx,ty,false).best;if(e<be){be=e;a0=a}}}
     angles=[];for(var i=-1;i<7;i++){var aa=a0+i*STEP;if(aa>=1&&aa<=179)angles.push(aa)}
     if(has)angles.forEach(function(a){res[a]=solve(a,FACE,wFull,tx,ty)});
-    var key=[S.dist,S.h,S.hSign,S.dir,S.wDir,S.wInt,PB,back].join("|");
+    var key=[S.dist,S.h,S.hSign,S.dir,S.wDir,wr,PB,back].join("|");
     if(HI.key!==key){HI.key=key;HI.sel=null}
     var auto=a0;
     if(has&&res[a0].err>20){var ord=angles.filter(function(x){return (x-a0)*STEP>0}).concat(angles.filter(function(x){return (x-a0)*STEP<0}));
@@ -294,7 +300,7 @@ function render(){
   if(!has){pw.textContent="—";pw.style.color="#fff";$("rSub").textContent="ใส่ระยะก่อน";st.textContent="";$("rPath").setAttribute("d","");mv("rS",-9,-9);mv("rT",-9,-9);return}
   var r=res[ang]||solve(ang,FACE,wind,tx,ty),T=BAR[S.speed-1],hit=r.err<=20,col=hit?"var(--green)":"var(--orange)";
   pw.textContent=r.p+"%";pw.style.color=col;st.textContent=hit?"โดน":"ไม่ถึง ลองมุมอื่น";st.style.color=col;
-  $("rSub").innerHTML='<b style="color:#fff;font-size:12px">มุม '+ang+'°'+(back?' · หันหนีเป้า':'')+'</b><br><span style="color:'+col+'">'+(hit?"โดน":"ไม่ถึง")+'</span> · ห่าง '+Math.round(r.err)+" px<br>ปล่อยหลอด "+(Math.max(0,r.p-1)/100*T).toFixed(2)+"–"+(r.p/100*T).toFixed(2)+" วิ";
+  $("rSub").innerHTML='<b style="color:#fff;font-size:12px">มุม '+ang+'°'+(back?' · หันหนีเป้า':'')+'</b>'+(S.mode==="high"?' <span style="font-size:10px">('+HI.wTxt+')</span>':'')+'<br><span style="color:'+col+'">'+(hit?"โดน":"ไม่ถึง")+'</span> · ห่าง '+Math.round(r.err)+" px<br>ปล่อยหลอด "+(Math.max(0,r.p-1)/100*T).toFixed(2)+"–"+(r.p/100*T).toFixed(2)+" วิ";
   var tr=sim(r.p*20,ang,FACE,wind,tx,ty,true),pts=tr.pts.slice(0,tr.bi+2);
   var xs=pts.map(function(p){return p[0]}).concat([0,tx]),ys=pts.map(function(p){return p[1]}).concat([0,ty]);
   var x0=Math.min.apply(null,xs),x1=Math.max.apply(null,xs),y0=Math.min.apply(null,ys),y1=Math.max.apply(null,ys);
