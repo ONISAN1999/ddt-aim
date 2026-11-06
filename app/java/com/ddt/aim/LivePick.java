@@ -382,7 +382,10 @@ public class LivePick extends View {
 
     private void hud(Canvas c, int w, int h) {
         float hw = Math.min(w - 24 * d, 600 * d), hh = 54 * d;
-        float left = (w - hw) / 2, top = h - hh - 10 * d;
+        // the power bar sits at the bottom of the game: move this panel up while measuring it,
+        // or whenever a finger works in the lower part of the screen
+        boolean up = step >= 4 || (touching && fy - loc[1] > h * 0.6f);
+        float left = (w - hw) / 2, top = up ? 10 * d : h - hh - 10 * d;
         RectF box = new RectF(left, top, left + hw, top + hh);
         fill.setColor(0xF01C1C1E);
         c.drawRoundRect(box, 16 * d, 16 * d, fill);
