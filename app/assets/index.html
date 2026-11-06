@@ -268,9 +268,16 @@ function autoPick(dir,w,tx,ty){
   var pool=all.filter(function(x){return x.sure});if(!pool.length)pool=all;
   if(!pool.length)return [];
   var o1=pool.reduce(function(m,x){return x.r.p<m.r.p||(x.r.p===m.r.p&&x.a>m.a)?x:m});
-  var hi=pool.filter(function(x){return x.a>=o1.a+8}),o2=hi.length?hi[hi.length-1]:null;
-  if(!o2){var lo=pool.filter(function(x){return x.a<=o1.a-8});o2=lo.length?lo[0]:null}
-  return o2?[o1,o2]:[o1];
+  /* 3 ทาง: แรงน้อยสุด + มุมสูงสุดที่โดน + มุมต่ำสุดที่โดน (ห่างกัน ≥8°) แล้วเรียงมุมน้อย→มาก
+     ถ้าฝั่งไหนไม่มี เติมมุมที่ห่างจากที่เลือกไว้มากที่สุด */
+  var pick=[o1],far=function(x){return pick.every(function(y){return Math.abs(y.a-x.a)>=8})};
+  var hi=pool.filter(function(x){return x.a>=o1.a+8});if(hi.length)pick.push(hi[hi.length-1]);
+  var lo=pool.filter(function(x){return x.a<=o1.a-8});if(lo.length)pick.push(lo[0]);
+  while(pick.length<3){var c=pool.filter(far);if(!c.length)break;
+    c.sort(function(a,b){var da=Math.min.apply(null,pick.map(function(y){return Math.abs(y.a-a.a)})),db=Math.min.apply(null,pick.map(function(y){return Math.abs(y.a-b.a)}));return db-da});
+    pick.push(c[0])}
+  o1.best=true;
+  return pick.sort(function(a,b){return a.a-b.a});
 }
 window.ddtSolve=solve;window.ddtAuto=autoPick;window.ddtSim=sim;
 
@@ -320,7 +327,8 @@ function render(){
     AU=has?autoPick(S.dir,wind,tx,ty):[];
     angles=AU.map(function(x){return x.a});AU.forEach(function(x){res[x.a]=x.r});
     if(!angles.length){angles=[45];if(has)res[45]=solve(45,S.dir,wind,tx,ty)}
-    ang=HI.sel!=null&&angles.indexOf(HI.sel)>=0?HI.sel:angles[0];
+    var bestA=(AU.filter(function(x){return x.best})[0]||{}).a;
+    ang=HI.sel!=null&&angles.indexOf(HI.sel)>=0?HI.sel:(bestA!=null?bestA:angles[0]);
   }else if(S.mode==="high"){
     /* มุมสูง: แรงหลัก PB (90/95/100) + ลมเฉพาะหลักเต็ม -> หามุม (แบบสูตร 90 - ระยะ ± ลม)
        แล้วใช้ลมจริงทั้งหมด (รวมเศษ .1-.9) หาแรงที่มุมนั้น = เศษลมไปปรับที่แรง */
@@ -368,7 +376,7 @@ function render(){
   var X=function(x){return (ox+(x-x0)*k).toFixed(1)},Y=function(y){return (57-(y-y0)*k).toFixed(1)};
   $("rPath").setAttribute("d",pts.map(function(p,i){return (i?"L":"M")+X(p[0])+" "+Y(p[1])}).join(" "));
   mv("rS",X(0),Y(0));mv("rT",X(tx),Y(ty));
-  if(!hit&&S.mode!=="auto"&&HUD){var ap=autoPick(S.dir,wind,tx,ty);LAST_HINT=ap.length?ap[0]:null}else LAST_HINT=null;
+  if(!hit&&S.mode!=="auto"&&HUD){var ap=autoPick(S.dir,wind,tx,ty);LAST_HINT=ap.length?(ap.filter(function(x){return x.best})[0]||ap[0]):null}else LAST_HINT=null;
   LAST={has:true,ang:ang,p:r.p,hit:hit,err:r.err,back:back,auto:AU,hint:LAST_HINT,other:low?LOWS.filter(function(a){return a!==LA&&res[a]}).map(function(a){return {a:a,r:res[a]}}):null};if(HUD){hudRender();
     var shots;
     if(AU&&AU.length)shots=AU.map(function(x,i){var t=sim(x.r.p*20,x.a,S.dir,wind,tx,ty,true);return {p:x.r.p,a:x.a,col:AUTO_COL[i],pts:t.pts.slice(0,t.bi+2)}});
@@ -541,7 +549,7 @@ window.ddtPickDone=function(fw,sx,sy,tx,ty,sw){
 /* ---------- HUD (แถบผลลอยข้างลูกบอล) ---------- */
 /* ส่งเส้นแนวยิง (px สนามรบ จากรถถังเรา แกน y ขึ้น) + แรง ให้ภาพทับเกม: ลดจุดเหลือ ≤40 */
 /* สี Auto: ทางแรก ฟ้า · ทางสอง เหลือง (ใช้ทั้งตัวเลข ขีดหลอดแรง และเส้นบนแผนที่) */
-var AUTO_COL=["#64D2FF","#FFD60A"];
+var AUTO_COL=["#64D2FF","#FFD60A","#FF7AD9"];
 function slim(src){var step=Math.max(1,Math.ceil(src.length/40)),out=[];
   for(var i=0;i<src.length;i+=step)out.push([Math.round(src[i][0]),Math.round(src[i][1])]);
   if(src.length){var l=src[src.length-1];out.push([Math.round(l[0]),Math.round(l[1])])}return out}
@@ -556,10 +564,10 @@ function hudRender(){
   var big=$("hBig"),sub=$("hSub");
   if(!LAST.has){big.textContent="—";big.style.color="#fff";sub.textContent="แตะลูกบอล แล้วแตะ ตัวเรา → เป้า"}
   else{
-    if(LAST.auto){big.style.color="var(--orange)";
-      if(LAST.auto.length)big.innerHTML=LAST.auto.map(function(x,i){return '<em style="font-style:normal;color:'+AUTO_COL[i]+'">'+x.a+"° "+x.r.p+'%</em>'}).join('<em style="font-style:normal;color:var(--l3)"> / </em>');
+    if(LAST.auto){big.style.color="var(--orange)";big.style.fontSize=LAST.auto.length>2?"17px":"";
+      if(LAST.auto.length)big.innerHTML=LAST.auto.map(function(x,i){return '<em style="font-style:normal;color:'+AUTO_COL[i]+'">'+x.a+"° "+x.r.p+'%</em>'}).join('<em style="font-style:normal;color:var(--l3)">'+(LAST.auto.length>2?" · ":" / ")+'</em>');
       else big.textContent="ไม่มีมุมที่โดน"}
-    else{big.textContent=LAST.ang+"° · "+LAST.p+"%";big.style.color=LAST.hit?"var(--green)":"var(--orange)"}
+    else{big.style.fontSize="";big.textContent=LAST.ang+"° · "+LAST.p+"%";big.style.color=LAST.hit?"var(--green)":"var(--orange)"}
     sub.textContent=S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px"+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(LAST.hit?"":LAST.hint?" · ลอง Auto "+LAST.hint.a+"° "+LAST.hint.r.p+"%":" · ไม่มีมุมที่โดน")+(LAST.auto&&LAST.auto.length&&!LAST.auto[0].sure?" · ไม่ชัวร์ เป้าแคบ":"")}
   /* แถวโหมดเรียงตามมุม: 30 · 50 · 65 · สูง 95 · กลับหัว — โชว์แรงของแต่ละมุมล็อกด้วย */
   var oth={};(LAST.has&&LAST.other||[]).forEach(function(o){oth[o.a]=o.r.p});if(LAST.has&&S.mode==="low")oth[LAST.ang]=LAST.p;
