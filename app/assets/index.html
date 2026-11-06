@@ -200,6 +200,7 @@ body.hud #hud{display:flex}
       </div>
       <div class="list">
         <button class="link" id="sFrame" style="color:#fff">ล้างกรอบแผนที่ที่จำไว้</button>
+        <button class="link" id="sBar" style="color:#fff;display:none;border-top:.5px solid var(--sep)">วัดตำแหน่งหลอดแรงใหม่ (ขีดบอกแรง)</button>
       </div>
       <div class="list" id="sErrBox" style="display:none;padding:10px 14px">
         <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--orange)">ข้อผิดพลาดล่าสุด (ส่งให้ผู้พัฒนาได้)</span><button class="link" id="sErrClr" style="width:auto;height:28px;padding:0;font-size:13px">ล้าง</button></div>
@@ -324,9 +325,10 @@ function render(){
     if(has)angles.forEach(function(a){res[a]=solve(a,S.dir,wind,tx,ty)});
 
   }else if(has){angles.forEach(function(a){res[a]=solve(a,S.dir,wind,tx,ty)})}
+  angles=angles.slice().sort(function(a,b){return a-b});   /* องศาน้อย → มาก */
   $("chips").innerHTML=angles.map(function(a){var r=res[a];return '<button class="chip'+(a===ang?" on":"")+'" data-a="'+a+'"><b>'+a+'°</b><span>'+(r?r.p+"%"+(r.err>20?" ~":""):"—")+'</span></button>'}).join("");
   var pw=$("rPow"),st=$("rStat");
-  if(!has){LAST={has:false};if(HUD)hudRender();pw.textContent="—";pw.style.color="#fff";$("rSub").textContent="ใส่ระยะก่อน";st.textContent="";$("rPath").setAttribute("d","");mv("rS",-9,-9);mv("rT",-9,-9);return}
+  if(!has){LAST={has:false};if(HUD){hudRender();sendAim(null)}pw.textContent="—";pw.style.color="#fff";$("rSub").textContent="ใส่ระยะก่อน";st.textContent="";$("rPath").setAttribute("d","");mv("rS",-9,-9);mv("rT",-9,-9);return}
   var r=res[ang]||solve(ang,FACE,wind,tx,ty),T=BAR[S.speed-1],hit=r.err<=20,col=hit?"var(--green)":"var(--orange)";
   pw.textContent=r.p+"%";pw.style.color=col;st.textContent=hit?"โดน":"ไม่ถึง ลองมุมอื่น";st.style.color=col;
   $("rSub").innerHTML='<b style="color:#fff;font-size:12px">มุม '+ang+'°'+(back?' · หันหนีเป้า':'')+'</b>'+(S.mode==="high"?' <span style="font-size:10px">('+HI.wTxt+')</span>':'')+'<br><span style="color:'+col+'">'+(hit?"โดน":"ไม่ถึง")+'</span> · ห่าง '+Math.round(r.err)+" px<br>ปล่อยหลอด "+(Math.max(0,r.p-1)/100*T).toFixed(2)+"–"+(r.p/100*T).toFixed(2)+" วิ";
@@ -337,7 +339,7 @@ function render(){
   var X=function(x){return (ox+(x-x0)*k).toFixed(1)},Y=function(y){return (57-(y-y0)*k).toFixed(1)};
   $("rPath").setAttribute("d",pts.map(function(p,i){return (i?"L":"M")+X(p[0])+" "+Y(p[1])}).join(" "));
   mv("rS",X(0),Y(0));mv("rT",X(tx),Y(ty));
-  LAST={has:true,ang:ang,p:r.p,hit:hit,err:r.err,back:back,other:low?{a:LA===30?50:30,r:res[LA===30?50:30]}:null};if(HUD)hudRender();
+  LAST={has:true,ang:ang,p:r.p,hit:hit,err:r.err,back:back,other:low?{a:LA===30?50:30,r:res[LA===30?50:30]}:null};if(HUD){hudRender();sendAim({p:r.p,hit:hit,t:[tx,ty],pts:pts})}
 }
 function mv(id,x,y){$(id).setAttribute("cx",x);$(id).setAttribute("cy",y)}
 
@@ -490,6 +492,7 @@ else{$("mEmptyT").textContent="เลือกรูปแคปหน้าจ�
   if(HOST&&HOST.toggleBubble){$("bBubble").style.display="flex";$("bBubble").onclick=function(){HOST.toggleBubble()}}}
 function lastErr(){try{return HOST&&HOST.lastError?HOST.lastError():""}catch(e){return ""}}
 function showErr(){var t=lastErr();$("sErrBox").style.display=t?"block":"none";$("sErr").textContent=t}
+if(BUBBLE&&HOST&&HOST.resetBar){$("sBar").style.display="block";$("sBar").onclick=function(){HOST.resetBar()}}
 $("sErrClr").onclick=function(){try{HOST.clearError()}catch(e){}showErr()};
 /* ผลจากโหมดแผนที่จอสด (Bubble): fw = ความกว้างกรอบจอเป็น px จอจริง, จุดเป็นพิกัดจอ */
 window.ddtPickDone=function(fw,sx,sy,tx,ty,sw){
@@ -500,6 +503,15 @@ window.ddtPickDone=function(fw,sx,sy,tx,ty,sw){
   toast("ระยะ "+S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · ต่างระดับ "+(S.hSign>0?"+":"−")+S.h+" px",2600);
 };
 /* ---------- HUD (แถบผลลอยข้างลูกบอล) ---------- */
+/* ส่งเส้นแนวยิง (px สนามรบ จากรถถังเรา แกน y ขึ้น) + แรง ให้ภาพทับเกม: ลดจุดเหลือ ≤40 */
+function sendAim(a){
+  if(!HOST||!HOST.showAim)return;
+  if(!a){HOST.showAim("");return}
+  var src=a.pts||[],step=Math.max(1,Math.ceil(src.length/40)),out=[];
+  for(var i=0;i<src.length;i+=step)out.push([Math.round(src[i][0]),Math.round(src[i][1])]);
+  if(src.length){var l=src[src.length-1];out.push([Math.round(l[0]),Math.round(l[1])])}
+  HOST.showAim(JSON.stringify({p:a.p,hit:a.hit,t:a.t,pts:out}));
+}
 function modeLabel(){return S.mode==="low"?"มุมต่ำ "+(S.lowA===50?50:30):S.mode!=="high"?"เลือกมุม "+S.angle+"°":S.back?"กลับหัว":"มุมสูง "+(S.hiBase||95)}
 function hudRender(){
   var big=$("hBig"),sub=$("hSub");

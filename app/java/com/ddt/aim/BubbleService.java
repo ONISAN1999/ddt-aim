@@ -62,6 +62,9 @@ public class BubbleService extends Service implements Bridge.Host {
     private ImageView ball;
     private WindowManager.LayoutParams ballLp;
     private TrashView trash;
+
+    private AimOverlay aim;
+    private float[] lastPick;            // {fw, sx, sy, tx, ty} screen px of the last map pick
     private WindowManager.LayoutParams trashLp;
 
     private FrameLayout hud;
@@ -214,6 +217,7 @@ public class BubbleService extends Service implements Bridge.Host {
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         prefs = getSharedPreferences("ddt", MODE_PRIVATE);
         try {
+            addAim();
             addHud();
             addBall();
         } catch (Throwable t) {
@@ -406,6 +410,61 @@ public class BubbleService extends Service implements Bridge.Host {
     }
 
     // ---------- HUD ----------
+    // ---------- aim overlay (path on the minimap + tick on the power bar) ----------
+    private void addAim() {
+        aim = new AimOverlay(this);
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(-1, -1, overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.TOP | Gravity.LEFT;
+        cutout(lp);
+        aim.setBar(prefs.getFloat("barL", 0), prefs.getFloat("barR", 0), prefs.getFloat("barY", 0));
+        aim.setVisibility(View.INVISIBLE);
+        wm.addView(aim, lp);
+    }
+
+    /** JSON from the HUD page: {p, hit, t:[tx,ty] battle px, pts:[[x,y],...] battle px from our tank, y up}. */
+    private void onAim(String json) {
+        if (aim == null) return;
+        if (json == null || json.length() == 0) { aim.clear(); return; }
+        try {
+            org.json.JSONObject o = new org.json.JSONObject(json);
+            int p = o.getInt("p");
+            boolean hit = o.optBoolean("hit");
+            float[] path = null;
+            float tx = -1, ty = -1;
+            org.json.JSONArray pts = o.optJSONArray("pts"), t = o.optJSONArray("t");
+            if (lastPick != null && pts != null && t != null) {
+                float k = lastPick[0] / 1000f, sx = lastPick[1], sy = lastPick[2];
+                // only when the calculator still holds the picked target
+                float btx = (lastPick[3] - sx) / k, bty = (sy - lastPick[4]) / k;
+                if (Math.abs(btx - t.getDouble(0)) < 15 && Math.abs(bty - t.getDouble(1)) < 15) {
+                    path = new float[pts.length() * 2];
+                    for (int i = 0; i < pts.length(); i++) {
+                        org.json.JSONArray q = pts.getJSONArray(i);
+                        path[i * 2] = sx + (float) q.getDouble(0) * k;
+                        path[i * 2 + 1] = sy - (float) q.getDouble(1) * k;
+                    }
+                    tx = lastPick[3]; ty = lastPick[4];
+                }
+            }
+            aim.setAim(p, hit, path, tx, ty);
+        } catch (Throwable e) {
+            CrashLog.note("aim", e);
+        }
+    }
+
+    private void setAimVisible(boolean on) {
+        if (aim != null) aim.setVisibility(on ? View.VISIBLE : View.INVISIBLE);
+    }
+
+    private void doResetBar() {
+        prefs.edit().remove("barL").remove("barR").remove("barY").apply();
+        if (aim != null) aim.setBar(0, 0, 0);
+        Toast.makeText(this, "ล้างตำแหน่งหลอดแรงแล้ว ครั้งต่อไปที่แตะลูกบอลจะให้แตะปลายหลอดใหม่", Toast.LENGTH_LONG).show();
+    }
+
     private void addHud() {
         hud = new FrameLayout(this);
         hudWeb = new WebView(this);
@@ -421,6 +480,8 @@ public class BubbleService extends Service implements Bridge.Host {
             public void pickLive(float fwr) { onBallTap(); }
             public void openPanel() { try { expand(); } catch (Throwable t) { CrashLog.note("expand", t); collapse(); } }
             public void install() { installViaMain(); }
+            public void showAim(String json) { onAim(json); }
+            public void resetBar() { doResetBar(); }
         }), "DDT");
         hudWeb.setWebViewClient(new WebViewClient() {
             @Override
@@ -457,6 +518,7 @@ public class BubbleService extends Service implements Bridge.Host {
         placeHudLp();
         try { wm.updateViewLayout(hud, hudLp); } catch (Exception ignored) { }
         hud.setVisibility(on ? View.VISIBLE : View.INVISIBLE);
+        setAimVisible(on);
     }
 
     private void placeHudLp() {
@@ -568,6 +630,12 @@ public class BubbleService extends Service implements Bridge.Host {
     @Override
     public void install() { installViaMain(); }
 
+    @Override
+    public void showAim(String json) { }
+
+    @Override
+    public void resetBar() { doResetBar(); }
+
     /** The overlay cannot rotate the screen: hand the install to the main screen, which turns portrait. */
     private void installViaMain() {
         collapse();
@@ -622,9 +690,14 @@ public class BubbleService extends Service implements Bridge.Host {
             return;
         }
         pickToHud = toHud;
-        pick = new LivePick(this, fwr, w, new LivePick.Cb() {
-            public void done(float fw, float sx, float sy, float tx, float ty, int sw) {
+        pick = new LivePick(this, fwr, w, aim == null || !aim.hasBar(), new LivePick.Cb() {
+            public void done(float fw, float sx, float sy, float tx, float ty, int sw, float[] bar) {
                 if (sw > 0 && fw > 3) prefs.edit().putFloat("fwr", fw / sw).apply();
+                if (bar != null) {
+                    prefs.edit().putFloat("barL", bar[0]).putFloat("barR", bar[1]).putFloat("barY", bar[2]).apply();
+                    if (aim != null) aim.setBar(bar[0], bar[1], bar[2]);
+                }
+                lastPick = new float[]{fw, sx, sy, tx, ty};
                 endPick("ddtPickDone(" + fw + "," + sx + "," + sy + "," + tx + "," + ty + "," + sw + ")");
             }
             public void cancel() { endPick(null); }
@@ -642,6 +715,7 @@ public class BubbleService extends Service implements Bridge.Host {
                 PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.TOP | Gravity.LEFT;
         cutout(lp);
+        setAimVisible(false);                // never let the overlay into the capture
         wm.addView(pick, lp);
         pick.requestFocus();
         if (ball != null) ball.setVisibility(View.INVISIBLE);   // keep the ball off the minimap while picking
@@ -715,7 +789,7 @@ public class BubbleService extends Service implements Bridge.Host {
         running = false;
         collapse();
         if (pick != null) endPick(null);
-        for (View v : new View[]{ball, trash, hud}) {
+        for (View v : new View[]{ball, trash, hud, aim}) {
             if (v != null) { try { wm.removeView(v); } catch (Exception ignored) { } }
         }
         if (hudWeb != null) { try { hudWeb.destroy(); } catch (Exception ignored) { } }

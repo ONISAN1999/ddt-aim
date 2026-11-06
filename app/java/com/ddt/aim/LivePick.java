@@ -19,14 +19,17 @@ import android.view.View;
  */
 public class LivePick extends View {
     public interface Cb {
-        void done(float fw, float sx, float sy, float tx, float ty, int screenW);
+        /** bar = {left x, right x, y} of the game's power bar in screen px, or null when not measured this time. */
+        void done(float fw, float sx, float sy, float tx, float ty, int screenW, float[] bar);
         void cancel();
         void reauth();
     }
 
     private static final String[] LBL = {
-            "ขอบซ้ายของกรอบจอสีขาว (ในแผนที่ย่อ)", "ขอบขวาของกรอบจอสีขาว", "ตัวเรา", "เป้าหมาย"};
-    private static final int[] COL = {0xFFFFFFFF, 0xFFFFFFFF, 0xFF5AC8FA, 0xFFFF9F0A};
+            "ขอบซ้ายของกรอบจอสีขาว (ในแผนที่ย่อ)", "ขอบขวาของกรอบจอสีขาว", "ตัวเรา", "เป้าหมาย",
+            "ซ้ายสุดของหลอดแรง (0%)", "ขวาสุดของหลอดแรง (100%)"};
+    private static final int[] COL = {0xFFFFFFFF, 0xFFFFFFFF, 0xFF5AC8FA, 0xFFFF9F0A, 0xFF30D158, 0xFF30D158};
+    private static final int N = 6;
     private static final float ZOOM = 4f;
 
     private final Cb cb;
@@ -34,7 +37,8 @@ public class LivePick extends View {
     private final int screenW;
     private final float fwr;
     private boolean useMem;
-    private final float[][] pts = new float[4][];
+    private final float[][] pts = new float[N][];
+    private final boolean needBar;
     private int step;
 
     private boolean touching, onButton;
@@ -54,12 +58,13 @@ public class LivePick extends View {
     private final Paint pix = new Paint();
     private final RectF bUndo = new RectF(), bCancel = new RectF(), bReframe = new RectF();
 
-    public LivePick(Context c, float fwr, int screenW, Cb cb) {
+    public LivePick(Context c, float fwr, int screenW, boolean needBar, Cb cb) {
         super(c);
         this.cb = cb;
         this.d = c.getResources().getDisplayMetrics().density;
         this.screenW = screenW;
         this.fwr = fwr;
+        this.needBar = needBar;
         this.useMem = fwr > 0;
         this.step = useMem ? 2 : 0;
         setFocusable(true);
@@ -98,6 +103,7 @@ public class LivePick extends View {
      */
     private float[] snap(float x, float y) {
         synchronized (lock) {
+            if (step >= 4) return null;                                        // power bar ends: plain tap
             if (frame == null || frameTime < touchStart + 150) return null;   // frame must not contain our own markers
             int r = Math.round(14 * d);
             int fw = Math.min(frame.getWidth(), screenW), fh = frame.getHeight();
@@ -227,21 +233,24 @@ public class LivePick extends View {
         return false;
     }
 
-    private boolean needed(int i) { return !(i < 2 && useMem); }
+    private boolean needed(int i) { return !(i < 2 && useMem) && !(i >= 4 && !needBar); }
 
     private void place(float sx, float sy) {
         pts[step] = new float[]{sx, sy};
         int next = -1;
-        for (int i = 0; i < 4; i++) if (pts[i] == null && needed(i)) { next = i; break; }
+        for (int i = 0; i < N; i++) if (pts[i] == null && needed(i)) { next = i; break; }
         if (next >= 0) { step = next; invalidate(); return; }
         float fw = (pts[0] != null && pts[1] != null) ? Math.abs(pts[1][0] - pts[0][0]) : fwr * screenW;
         if (fw < 3) { reframe(); return; }
-        cb.done(fw, pts[2][0], pts[2][1], pts[3][0], pts[3][1], screenW);
+        float[] bar = null;
+        if (pts[4] != null && pts[5] != null && Math.abs(pts[5][0] - pts[4][0]) > 20 * d)
+            bar = new float[]{Math.min(pts[4][0], pts[5][0]), Math.max(pts[4][0], pts[5][0]), (pts[4][1] + pts[5][1]) / 2};
+        cb.done(fw, pts[2][0], pts[2][1], pts[3][0], pts[3][1], screenW, bar);
     }
 
     private void undo() {
         int last = -1;
-        for (int i = 3; i >= 0; i--) if (pts[i] != null) { last = i; break; }
+        for (int i = N - 1; i >= 0; i--) if (pts[i] != null) { last = i; break; }
         if (last < 0) return;
         pts[last] = null;
         step = last;
@@ -274,7 +283,7 @@ public class LivePick extends View {
             c.drawLine(x, y - 40 * d, x, y + 40 * d, stroke);
         }
         // markers
-        if (!touching) for (int i = 0; i < 4; i++) {
+        if (!touching) for (int i = 0; i < N; i++) {
             if (pts[i] == null) continue;
             marker(c, pts[i][0] - loc[0], pts[i][1] - loc[1], i);
         }
@@ -379,14 +388,14 @@ public class LivePick extends View {
         c.drawRoundRect(box, 16 * d, 16 * d, fill);
 
         int n = 0, done = 0;
-        for (int i = 0; i < 4; i++) if (needed(i)) { n++; if (pts[i] != null) done++; }
+        for (int i = 0; i < N; i++) if (needed(i)) { n++; if (pts[i] != null) done++; }
         text.setTextAlign(Paint.Align.LEFT);
         text.setColor(COL[step] == 0xFFFFFFFF ? 0xFF0A84FF : COL[step]);
         text.setTextSize(14 * d);
         c.drawText("แตะ: " + LBL[step] + "  (" + (done + 1) + "/" + n + ")", left + 14 * d, top + 23 * d, text);
         text.setColor(0xFFAEAEB2);
         text.setTextSize(11 * d);
-        c.drawText(useMem ? "ใช้กรอบจอที่จำไว้ · ลากนิ้วดูแว่นขยาย" : "ลากนิ้วดูแว่นขยาย แล้วปล่อยตรงจุดที่ต้องการ",
+        c.drawText(step >= 4 ? "ตั้งครั้งเดียว: แตะปลายหลอดแรงด้านล่างจอ (ใช้วางขีดบอกแรง)" : useMem ? "ใช้กรอบจอที่จำไว้ · ลากนิ้วดูแว่นขยาย" : "ลากนิ้วดูแว่นขยาย แล้วปล่อยตรงจุดที่ต้องการ",
                 left + 14 * d, top + 42 * d, text);
 
         float bw = 72 * d, bh = 36 * d, by = top + (hh - bh) / 2, x = left + hw - 10 * d - bw;

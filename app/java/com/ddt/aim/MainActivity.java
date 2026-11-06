@@ -173,6 +173,12 @@ public class MainActivity extends Activity implements Bridge.Host {
     @Override
     public void openPanel() { }
 
+    @Override
+    public void showAim(String json) { }
+
+    @Override
+    public void resetBar() { }
+
     private boolean installing = false;
     private long installAt = 0;
 

@@ -15,6 +15,8 @@ public class Bridge {
         void openPanel();
         /** Install the downloaded update (the main screen turns portrait for the fingerprint prompt). */
         void install();
+        void showAim(String json);
+        void resetBar();
     }
 
     private final Context ctx;
@@ -83,6 +85,16 @@ public class Bridge {
     @JavascriptInterface
     public void openPanel() {
         if (host != null) onUi(new Runnable() { public void run() { host.openPanel(); } });
+    }
+
+    @JavascriptInterface
+    public void showAim(final String json) {
+        if (host != null) onUi(new Runnable() { public void run() { host.showAim(json); } });
+    }
+
+    @JavascriptInterface
+    public void resetBar() {
+        if (host != null) onUi(new Runnable() { public void run() { host.resetBar(); } });
     }
 
     @JavascriptInterface
