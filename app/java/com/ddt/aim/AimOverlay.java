@@ -100,7 +100,7 @@ public class AimOverlay extends View {
             line.setStrokeWidth(3 * d);
             c.drawLine(x, y - h, x, y + h, line);
 
-            String lbl = (shots.size() > 1 ? s.angle + "° " : "") + s.power + "%";
+            String lbl = s.angle + "° " + s.power + "%";   // always angle + power, every mode
             text.setTextSize(15 * d);
             float tw = text.measureText(lbl) + 14 * d;
             level = Math.abs(x - prevX) < tw + 4 * d ? level + 1 : 0;
