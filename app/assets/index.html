@@ -104,7 +104,7 @@ body.hud #hud{display:flex}
 .hm small{display:block;font-size:10px;font-weight:500;opacity:.85;line-height:1}
 .hr2{grid-template-columns:repeat(8,minmax(0,1fr))}.hr3{grid-template-columns:repeat(10,minmax(0,1fr))}
 .hk{border-radius:8px;background:rgba(58,58,60,var(--ha));font-size:14px;font-weight:600;color:rgba(255,255,255,calc(.45 + var(--ha)*.6));text-shadow:0 0 2px rgba(0,0,0,.8)}
-.hk.on{background:rgba(10,132,255,calc(.35 + var(--ha)*.7));color:#fff}.hk.dir.on{background:rgba(99,99,102,calc(.35 + var(--ha)*.7));color:#fff}
+.hk.on{background:rgba(10,132,255,calc(.35 + var(--ha)*.7));color:#fff}.hk.dir{font-size:20px;font-weight:800}.hk.dir.on{background:#64D2FF;color:#000;text-shadow:none;box-shadow:0 0 0 2px #fff inset}
 #toast{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);max-width:520px;padding:10px 16px;border-radius:14px;background:rgba(58,58,60,.97);font-size:13px;line-height:1.5;text-align:center;display:none;z-index:9}
 .ubar{position:absolute;left:50%;top:6px;transform:translateX(-50%);display:none;align-items:center;gap:10px;padding:6px 8px 6px 14px;border-radius:14px;background:rgba(44,44,46,.97);font-size:13px;z-index:4}
 .ubar.on{display:flex}
@@ -568,13 +568,13 @@ function hudRender(){
       if(LAST.auto.length)big.innerHTML=LAST.auto.map(function(x,i){return '<em style="font-style:normal;color:'+AUTO_COL[i]+'">'+x.a+"° "+x.r.p+'%</em>'}).join('<em style="font-style:normal;color:var(--l3)">'+(LAST.auto.length>2?" · ":" / ")+'</em>');
       else big.textContent="ไม่มีมุมที่โดน"}
     else{big.style.fontSize="";big.textContent=LAST.ang+"° · "+LAST.p+"%";big.style.color=LAST.hit?"var(--green)":"var(--orange)"}
-    sub.textContent=S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px"+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(LAST.hit?"":LAST.hint?" · ลอง Auto "+LAST.hint.a+"° "+LAST.hint.r.p+"%":" · ไม่มีมุมที่โดน")+(LAST.auto&&LAST.auto.length&&!LAST.auto[0].sure?" · ไม่ชัวร์ เป้าแคบ":"")}
+    sub.textContent=S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px · ลม "+(S.wDir>0?"→":"←")+S.wInt+"."+S.wDec+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(LAST.hit?"":LAST.hint?" · ลอง Auto "+LAST.hint.a+"° "+LAST.hint.r.p+"%":" · ไม่มีมุมที่โดน")+(LAST.auto&&LAST.auto.length&&!LAST.auto[0].sure?" · ไม่ชัวร์ เป้าแคบ":"")}
   /* แถวโหมดเรียงตามมุม: 30 · 50 · 65 · สูง 95 · กลับหัว — โชว์แรงของแต่ละมุมล็อกด้วย */
   var oth={};(LAST.has&&LAST.other||[]).forEach(function(o){oth[o.a]=o.r.p});if(LAST.has&&S.mode==="low")oth[LAST.ang]=LAST.p;
   var cur=S.mode==="auto"?"A":S.mode==="low"?"L"+S.lowA:S.mode==="high"?(S.back?"B":"H"):"";
   $("hM").innerHTML='<button class="hm'+(cur==="A"?" on":"")+'" data-hm="A">Auto</button>'+[30,50,65].map(function(a){var on=cur==="L"+a;return '<button class="hm'+(on?" on":"")+'" data-hm="L'+a+'">'+a+'°'+(oth[a]!=null?'<small>'+oth[a]+'%</small>':'')+'</button>'}).join("")+
     '<button class="hm'+(cur==="H"?" on":"")+'" data-hm="H">สูง '+(S.hiBase||95)+'</button><button class="hm'+(cur==="B"?" on":"")+'" data-hm="B">กลับหัว</button>';
-  $("hW1").innerHTML='<button class="hk dir'+(S.wDir<0?" on":"")+'" data-hd="-1" aria-label="ลมพัดซ้าย">←</button><button class="hk dir'+(S.wDir>0?" on":"")+'" data-hd="1" aria-label="ลมพัดขวา">→</button>'+
+  $("hW1").innerHTML='<button class="hk dir'+(S.wDir<0?" on":"")+'" data-hd="-1" aria-label="ลมพัดซ้าย" aria-pressed="'+(S.wDir<0)+'"><svg width="22" height="16" viewBox="0 0 22 16" aria-hidden="true" style="vertical-align:middle"><path d="M20 8H3M9 2L3 8l6 6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="hk dir'+(S.wDir>0?" on":"")+'" data-hd="1" aria-label="ลมพัดขวา" aria-pressed="'+(S.wDir>0)+'"><svg width="22" height="16" viewBox="0 0 22 16" aria-hidden="true" style="vertical-align:middle"><path d="M2 8h17M13 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>'+
     [0,1,2,3,4,5].map(function(n){return '<button class="hk'+(n===S.wInt?" on":"")+'" data-wi="'+n+'">'+n+'</button>'}).join("");
   $("hW2").innerHTML=[0,1,2,3,4,5,6,7,8,9].map(function(n){return '<button class="hk'+(n===S.wDec?" on":"")+'" data-wd="'+n+'">.'+n+'</button>'}).join("");
 }
