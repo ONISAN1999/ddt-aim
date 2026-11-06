@@ -94,11 +94,11 @@ body.hud{background:transparent}body.hud #stage{display:none}
 body.hud #hud{display:flex}
 .hr1{height:44px;display:flex;gap:4px;align-items:stretch}
 .hres{flex:1;min-width:0;background:transparent;text-align:left;display:flex;flex-direction:column;justify-content:center;padding:0 6px;border-radius:10px}
-.hres b{font-size:22px;font-weight:700;line-height:1.1;white-space:nowrap}
+.hres b{font-size:21px;font-weight:700;line-height:1.1;white-space:nowrap}
 .hres span{font-size:10px;color:var(--l2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hb{min-width:40px;border-radius:10px;background:var(--g2);font-size:12px;padding:0 8px;white-space:nowrap}
 .hr2,.hr3{height:34px;display:grid;gap:3px}
-.hrm{height:34px;display:grid;grid-template-columns:1fr 1fr 1fr 1.25fr 1.25fr;gap:3px}
+.hrm{height:34px;display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr 1.25fr 1.3fr;gap:3px}
 .hm{border-radius:8px;background:var(--g2);font-size:13px;font-weight:600;color:var(--l2)}
 .hm.on{background:var(--blue);color:#fff}
 .hm small{display:block;font-size:10px;font-weight:500;opacity:.85;line-height:1}
@@ -129,7 +129,7 @@ body.hud #hud{display:flex}
   <div class="view on" id="vCalc">
     <div class="col">
       <div class="card res">
-        <div class="row"><div class="mseg"><button id="mPick">เลือกมุม</button><button id="mLow" aria-label="มุมล็อก แตะซ้ำเพื่อสลับ 30 50 65 องศา">มุมต่ำ</button><button id="mHigh" aria-label="มุมสูง แตะซ้ำเพื่อเปลี่ยนแรงหลัก">มุมสูง</button><button id="mBack" aria-label="กลับหัว: หันหนีเป้า มุมเกิน 90 องศา">กลับหัว</button></div><span id="rStat" style="display:none"></span></div>
+        <div class="row"><div class="mseg"><button id="mAuto" aria-label="Auto: หามุมและแรงที่โดนให้เอง">Auto</button><button id="mPick">เลือกมุม</button><button id="mLow" aria-label="มุมล็อก แตะซ้ำเพื่อสลับ 30 50 65 องศา">มุมต่ำ</button><button id="mHigh" aria-label="มุมสูง แตะซ้ำเพื่อเปลี่ยนแรงหลัก">มุมสูง</button><button id="mBack" aria-label="กลับหัว: หันหนีเป้า มุมเกิน 90 องศา">กลับหัว</button></div><span id="rStat" style="display:none"></span></div>
         <div style="display:flex;align-items:baseline;gap:10px"><span class="pw" id="rPow">—</span><span class="sub" id="rSub">ใส่ระยะก่อน</span></div>
         <svg width="222" height="54" viewBox="0 0 222 62" preserveAspectRatio="none" aria-hidden="true" style="margin-top:2px"><line x1="0" y1="61" x2="222" y2="61" stroke="#3A3A3C"/><path id="rPath" d="" fill="none" stroke="#0A84FF" stroke-width="2" stroke-dasharray="4 3"/><circle id="rS" r="4" fill="#5AC8FA" cx="-9" cy="-9"/><circle id="rT" r="5" fill="none" stroke="#FF9F0A" stroke-width="2" cx="-9" cy="-9"/></svg>
       </div>
@@ -232,7 +232,7 @@ body.hud #hud{display:flex}
 var $=function(id){return document.getElementById(id)};
 var HOST=window.DDT||null;
 var BUBBLE=/[?&]bubble=1/.test(location.search),HUD=/[?&]hud=1/.test(location.search);
-var LAST={has:false};
+var LAST={has:false},LAST_HINT=null;
 var W=844,H=390;
 function fit(){var s=Math.min(innerWidth/W,innerHeight/H),st=$("stage");st.style.transform="translate("+((innerWidth-W*s)/2)+"px,"+((innerHeight-H*s)/2)+"px) scale("+s+")";}
 addEventListener("resize",fit);fit();
@@ -252,12 +252,26 @@ function sim(F,a,dir,w,tx,ty,keep){
     if(keep)pts.push([x,y]);
     var dx=x-px,dy=y-py,L=dx*dx+dy*dy,t=L?((tx-px)*dx+(ty-py)*dy)/L:0;t=t<0?0:t>1?1:t;
     var d=Math.hypot(px+t*dx-tx,py+t*dy-ty);if(d<best){best=d;bt=i*0.04;bi=i}
-    px=x;py=y;if(y<ty-800||Math.abs(x)>8000)break;
+    px=x;py=y;if((vy>0&&y<ty-800)||y<-3000||Math.abs(x)>8000)break;
   }
   return {best:best,bt:bt,bi:bi,pts:pts};
 }
 function solve(a,dir,w,tx,ty){var bp=0,bb=1e9,bt=0;for(var p=0;p<=100;p++){var s=sim(p*20,a,dir,w,tx,ty,false);if(s.best<bb){bb=s.best;bp=p;bt=s.bt}}return {p:bp,err:bb,t:bt}}
-window.ddtSolve=solve;window.ddtSim=sim;
+/* Auto: ไล่มุม 20–90 หาคู่ มุม/แรง ที่โดนแน่นอน
+   "แน่นอน" = แรงที่บอกตกห่างเป้า ≤20 px และแรงต่ำกว่า 1% (ช่วงปล่อยหลอด) ยังตกในรัศมีระเบิด 55 px
+   คืน 2 ตัวเลือก: แรงน้อยสุด (ทนมุมเพี้ยนสุด) + มุมสูงสุดที่โดน (ห่างกัน ≥8°) */
+function autoPick(dir,w,tx,ty){
+  var all=[];
+  for(var a=20;a<=90;a++){var r=solve(a,dir,w,tx,ty);if(r.err>20)continue;
+    var e2=r.p>0?sim((r.p-1)*20,a,dir,w,tx,ty,false).best:r.err;all.push({a:a,r:r,sure:e2<=55})}
+  var pool=all.filter(function(x){return x.sure});if(!pool.length)pool=all;
+  if(!pool.length)return [];
+  var o1=pool.reduce(function(m,x){return x.r.p<m.r.p||(x.r.p===m.r.p&&x.a>m.a)?x:m});
+  var hi=pool.filter(function(x){return x.a>=o1.a+8}),o2=hi.length?hi[hi.length-1]:null;
+  if(!o2){var lo=pool.filter(function(x){return x.a<=o1.a-8});o2=lo.length?lo[0]:null}
+  return o2?[o1,o2]:[o1];
+}
+window.ddtSolve=solve;window.ddtAuto=autoPick;window.ddtSim=sim;
 
 /* ---------- calc state ---------- */
 var ANGLES=[30,45,50,55,60,65,70,90];
@@ -295,11 +309,18 @@ function render(){
   [].forEach.call(document.querySelectorAll("[data-wd]"),function(b){b.classList.toggle("on",+b.dataset.wd===S.wDec)});
   [].forEach.call(document.querySelectorAll("[data-sp]"),function(b){b.classList.toggle("on",+b.dataset.sp===S.speed)});
   var LOWS=[30,50,65],low=S.mode==="low",LA=LOWS.indexOf(S.lowA)>=0?S.lowA:30;
-  $("mPick").classList.toggle("on",S.mode==="pick");$("mLow").classList.toggle("on",low);$("mLow").textContent=low?"มุมต่ำ "+LA:"มุมต่ำ";$("mHigh").textContent="มุมสูง";
+  $("mPick").classList.toggle("on",S.mode==="pick");$("mAuto").classList.toggle("on",S.mode==="auto");$("mLow").classList.toggle("on",low);$("mLow").textContent=low?"มุมต่ำ "+LA:"มุมต่ำ";$("mHigh").textContent="มุมสูง";
   var back=S.mode==="high"&&!!S.back,FACE=back?-S.dir:S.dir;
   $("mHigh").classList.toggle("on",S.mode==="high"&&!back);$("mBack").classList.toggle("on",back);
   var angles=ANGLES,res={},ang=S.angle;
-  if(S.mode==="high"){
+  var AU=null;
+  if(S.mode==="auto"){
+    var akey=[S.dist,S.h,S.hSign,S.dir,wind].join("|");if(HI.akey!==akey){HI.akey=akey;HI.sel=null}
+    AU=has?autoPick(S.dir,wind,tx,ty):[];
+    angles=AU.map(function(x){return x.a});AU.forEach(function(x){res[x.a]=x.r});
+    if(!angles.length){angles=[45];if(has)res[45]=solve(45,S.dir,wind,tx,ty)}
+    ang=HI.sel!=null&&angles.indexOf(HI.sel)>=0?HI.sel:angles[0];
+  }else if(S.mode==="high"){
     /* มุมสูง: แรงหลัก PB (90/95/100) + ลมเฉพาะหลักเต็ม -> หามุม (แบบสูตร 90 - ระยะ ± ลม)
        แล้วใช้ลมจริงทั้งหมด (รวมเศษ .1-.9) หาแรงที่มุมนั้น = เศษลมไปปรับที่แรง */
     var PB=S.hiBase||95,wFull=wind;
@@ -343,7 +364,8 @@ function render(){
   var X=function(x){return (ox+(x-x0)*k).toFixed(1)},Y=function(y){return (57-(y-y0)*k).toFixed(1)};
   $("rPath").setAttribute("d",pts.map(function(p,i){return (i?"L":"M")+X(p[0])+" "+Y(p[1])}).join(" "));
   mv("rS",X(0),Y(0));mv("rT",X(tx),Y(ty));
-  LAST={has:true,ang:ang,p:r.p,hit:hit,err:r.err,back:back,other:low?LOWS.filter(function(a){return a!==LA&&res[a]}).map(function(a){return {a:a,r:res[a]}}):null};if(HUD){hudRender();sendAim({p:r.p,hit:hit,t:[tx,ty],pts:pts})}
+  if(!hit&&S.mode!=="auto"&&HUD){var ap=autoPick(S.dir,wind,tx,ty);LAST_HINT=ap.length?ap[0]:null}else LAST_HINT=null;
+  LAST={has:true,ang:ang,p:r.p,hit:hit,err:r.err,back:back,auto:AU,hint:LAST_HINT,other:low?LOWS.filter(function(a){return a!==LA&&res[a]}).map(function(a){return {a:a,r:res[a]}}):null};if(HUD){hudRender();sendAim({p:r.p,hit:hit,t:[tx,ty],pts:pts})}
 }
 function mv(id,x,y){$(id).setAttribute("cx",x);$(id).setAttribute("cy",y)}
 
@@ -469,11 +491,11 @@ document.addEventListener("click",function(e){
   else if(d.wi!=null){S.wInt=+d.wi;render()}
   else if(d.wd!=null){S.wDec=+d.wd;render()}
   else if(d.sp!=null){S.speed=+d.sp;render()}
-  else if(d.a!=null){if(S.mode==="high")HI.sel=+d.a;else if(S.mode==="low")S.lowA=+d.a;else S.angle=+d.a;render()}
+  else if(d.a!=null){if(S.mode==="high"||S.mode==="auto")HI.sel=+d.a;else if(S.mode==="low")S.lowA=+d.a;else S.angle=+d.a;render()}
   else if(d.st!=null){M.step=+d.st;drawMap()}
 });
 $("fDist").onclick=function(){S.field="dist";render()};$("fH").onclick=function(){S.field="h";render()};
-$("mPick").onclick=function(){S.mode="pick";render()};$("mLow").onclick=function(){if(S.mode==="low")S.lowA=S.lowA===30?50:S.lowA===50?65:30;else S.mode="low";render()};$("mBack").onclick=function(){S.back=S.mode==="high"?!S.back:true;S.mode="high";HI.key="";render()};$("mHigh").onclick=function(){if(S.mode==="high"&&S.back){S.back=false}else if(S.mode==="high"){S.hiBase=S.hiBase===95?100:S.hiBase===100?90:95;toast("แรงหลัก "+S.hiBase+"%",1200)}S.mode="high";HI.key="";render()};
+$("mPick").onclick=function(){S.mode="pick";render()};$("mAuto").onclick=function(){S.mode="auto";HI.key="";HI.sel=null;render()};$("mLow").onclick=function(){if(S.mode==="low")S.lowA=S.lowA===30?50:S.lowA===50?65:30;else S.mode="low";render()};$("mBack").onclick=function(){S.back=S.mode==="high"?!S.back:true;S.mode="high";HI.key="";render()};$("mHigh").onclick=function(){if(S.mode==="high"&&S.back){S.back=false}else if(S.mode==="high"){S.hiBase=S.hiBase===95?100:S.hiBase===100?90:95;toast("แรงหลัก "+S.hiBase+"%",1200)}S.mode="high";HI.key="";render()};
 $("wL").onclick=function(){S.wDir=-1;render()};$("wR").onclick=function(){S.wDir=1;render()};
 $("tCalc").onclick=function(){setTab("calc")};$("tMap").onclick=function(){if(BUBBLE&&HOST&&HOST.pickLive){HOST.pickLive(String(M.fwr||0))}else setTab("map")};
 $("bShot").onclick=capture;$("bShot2").onclick=capture;
@@ -520,12 +542,14 @@ function modeLabel(){return S.mode==="low"?"มุม "+S.lowA:S.mode!=="high"?"
 function hudRender(){
   var big=$("hBig"),sub=$("hSub");
   if(!LAST.has){big.textContent="—";big.style.color="#fff";sub.textContent="แตะลูกบอล แล้วแตะ ตัวเรา → เป้า"}
-  else{big.textContent=LAST.ang+"° · "+LAST.p+"%";big.style.color=LAST.hit?"var(--green)":"var(--orange)";
-    sub.textContent=S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px"+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(LAST.hit?"":" · ไม่ถึง")}
+  else{
+    if(LAST.auto){big.textContent=LAST.auto.length?LAST.auto.map(function(x){return x.a+"° "+x.r.p+"%"}).join(" / "):"ไม่มีมุมที่โดน";big.style.color=LAST.auto.length?"var(--green)":"var(--orange)"}
+    else{big.textContent=LAST.ang+"° · "+LAST.p+"%";big.style.color=LAST.hit?"var(--green)":"var(--orange)"}
+    sub.textContent=S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px"+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(LAST.hit?"":LAST.hint?" · ลอง Auto "+LAST.hint.a+"° "+LAST.hint.r.p+"%":" · ไม่มีมุมที่โดน")+(LAST.auto&&LAST.auto.length&&!LAST.auto[0].sure?" · ไม่ชัวร์ เป้าแคบ":"")}
   /* แถวโหมดเรียงตามมุม: 30 · 50 · 65 · สูง 95 · กลับหัว — โชว์แรงของแต่ละมุมล็อกด้วย */
   var oth={};(LAST.has&&LAST.other||[]).forEach(function(o){oth[o.a]=o.r.p});if(LAST.has&&S.mode==="low")oth[LAST.ang]=LAST.p;
-  var cur=S.mode==="low"?"L"+S.lowA:S.mode==="high"?(S.back?"B":"H"):"";
-  $("hM").innerHTML=[30,50,65].map(function(a){var on=cur==="L"+a;return '<button class="hm'+(on?" on":"")+'" data-hm="L'+a+'">'+a+'°'+(oth[a]!=null?'<small>'+oth[a]+'%</small>':'')+'</button>'}).join("")+
+  var cur=S.mode==="auto"?"A":S.mode==="low"?"L"+S.lowA:S.mode==="high"?(S.back?"B":"H"):"";
+  $("hM").innerHTML='<button class="hm'+(cur==="A"?" on":"")+'" data-hm="A">Auto</button>'+[30,50,65].map(function(a){var on=cur==="L"+a;return '<button class="hm'+(on?" on":"")+'" data-hm="L'+a+'">'+a+'°'+(oth[a]!=null?'<small>'+oth[a]+'%</small>':'')+'</button>'}).join("")+
     '<button class="hm'+(cur==="H"?" on":"")+'" data-hm="H">สูง '+(S.hiBase||95)+'</button><button class="hm'+(cur==="B"?" on":"")+'" data-hm="B">กลับหัว</button>';
   $("hW1").innerHTML='<button class="hk dir'+(S.wDir<0?" on":"")+'" data-hd="-1" aria-label="ลมพัดซ้าย">←</button><button class="hk dir'+(S.wDir>0?" on":"")+'" data-hd="1" aria-label="ลมพัดขวา">→</button>'+
     [0,1,2,3,4,5].map(function(n){return '<button class="hk'+(n===S.wInt?" on":"")+'" data-wi="'+n+'">'+n+'</button>'}).join("");
@@ -539,6 +563,7 @@ if(HUD){document.body.classList.add("hud");
   document.addEventListener("click",function(e){var b=e.target.closest("[data-hm]");if(!b)return;var m=b.dataset.hm;
     if(m==="H"){if(S.mode==="high"&&!S.back)S.hiBase=S.hiBase===95?100:S.hiBase===100?90:95;S.mode="high";S.back=false}
     else if(m==="B"){S.mode="high";S.back=true}
+    else if(m==="A"){S.mode="auto";HI.sel=null}
     else{S.mode="low";S.lowA=+m.slice(1)}
     HI.key="";render()});
 }
