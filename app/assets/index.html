@@ -90,21 +90,21 @@ button:active{filter:brightness(1.35)}
 .sw span{width:27px;height:27px;border-radius:14px;background:#fff;display:block}
 .link{background:transparent;color:var(--blue);font-size:15px;width:100%;height:48px;text-align:left;padding:0 14px}
 body.hud{background:transparent}body.hud #stage{display:none}
-#hud{position:fixed;inset:0;background:rgba(28,28,30,.94);border-radius:16px;padding:6px;display:none;flex-direction:column;gap:4px;border:.5px solid rgba(255,255,255,.14)}
+#hud{--ha:.35;position:fixed;inset:0;background:rgba(18,18,20,calc(var(--ha)*.55));border-radius:16px;padding:6px;display:none;flex-direction:column;gap:4px;border:.5px solid rgba(255,255,255,calc(var(--ha)*.3))}
 body.hud #hud{display:flex}
 .hr1{height:44px;display:flex;gap:4px;align-items:stretch}
-.hres{flex:1;min-width:0;background:transparent;text-align:left;display:flex;flex-direction:column;justify-content:center;padding:0 6px;border-radius:10px}
-.hres b{font-size:21px;font-weight:700;line-height:1.1;white-space:nowrap}
-.hres span{font-size:10px;color:var(--l2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hb{min-width:40px;border-radius:10px;background:var(--g2);font-size:12px;padding:0 8px;white-space:nowrap}
+.hres{flex:1;min-width:0;background:rgba(0,0,0,.62);text-align:left;display:flex;flex-direction:column;justify-content:center;padding:0 6px;border-radius:10px}
+.hres b{font-size:22px;font-weight:800;line-height:1.1;white-space:nowrap;text-shadow:0 0 2px #000,0 0 4px #000,0 1px 1px #000}
+ .hres span{font-size:10px;color:#D1D1D6;text-shadow:0 0 2px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb{min-width:40px;border-radius:10px;background:rgba(58,58,60,var(--ha));color:rgba(255,255,255,calc(.45 + var(--ha)*.6));font-size:12px;padding:0 8px;white-space:nowrap}
 .hr2,.hr3{height:34px;display:grid;gap:3px}
 .hrm{height:34px;display:grid;grid-template-columns:1.1fr 1fr 1fr 1fr 1.25fr 1.3fr;gap:3px}
-.hm{border-radius:8px;background:var(--g2);font-size:13px;font-weight:600;color:var(--l2)}
-.hm.on{background:var(--blue);color:#fff}
+.hm{border-radius:8px;background:rgba(58,58,60,var(--ha));font-size:13px;font-weight:600;color:rgba(235,235,245,calc(.45 + var(--ha)*.6));text-shadow:0 0 2px rgba(0,0,0,.8)}
+.hm.on{background:rgba(10,132,255,calc(.35 + var(--ha)*.7));color:#fff}
 .hm small{display:block;font-size:10px;font-weight:500;opacity:.85;line-height:1}
 .hr2{grid-template-columns:repeat(8,minmax(0,1fr))}.hr3{grid-template-columns:repeat(10,minmax(0,1fr))}
-.hk{border-radius:8px;background:var(--g2);font-size:14px;font-weight:600}
-.hk.on{background:var(--blue)}.hk.dir.on{background:var(--g5)}
+.hk{border-radius:8px;background:rgba(58,58,60,var(--ha));font-size:14px;font-weight:600;color:rgba(255,255,255,calc(.45 + var(--ha)*.6));text-shadow:0 0 2px rgba(0,0,0,.8)}
+.hk.on{background:rgba(10,132,255,calc(.35 + var(--ha)*.7));color:#fff}.hk.dir.on{background:rgba(99,99,102,calc(.35 + var(--ha)*.7));color:#fff}
 #toast{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);max-width:520px;padding:10px 16px;border-radius:14px;background:rgba(58,58,60,.97);font-size:13px;line-height:1.5;text-align:center;display:none;z-index:9}
 .ubar{position:absolute;left:50%;top:6px;transform:translateX(-50%);display:none;align-items:center;gap:10px;padding:6px 8px 6px 14px;border-radius:14px;background:rgba(44,44,46,.97);font-size:13px;z-index:4}
 .ubar.on{display:flex}
@@ -203,6 +203,7 @@ body.hud #hud{display:flex}
         <button class="link" id="sCheck">ตรวจหาเวอร์ชันใหม่</button>
       </div>
       <div class="list">
+        <div class="srow" id="sHaRow" style="display:none;gap:12px"><span style="white-space:nowrap">ความทึบปุ่มแถบผล</span><input type="range" id="sHa" min="10" max="90" step="5" style="flex:1;accent-color:#0A84FF"><b id="sHaV" style="width:40px;text-align:right;font-size:13px"></b></div>
         <button class="link" id="sFrame" style="color:#fff">ล้างกรอบแผนที่ที่จำไว้</button>
         <button class="link" id="sBar" style="color:#fff;display:none;border-top:.5px solid var(--sep)">วัดตำแหน่งหลอดแรงใหม่ (ขีดบอกแรง)</button>
       </div>
@@ -525,6 +526,8 @@ else{$("mEmptyT").textContent="เลือกรูปแคปหน้าจ�
   if(HOST&&HOST.toggleBubble){$("bBubble").style.display="flex";$("bBubble").onclick=function(){HOST.toggleBubble()}}}
 function lastErr(){try{return HOST&&HOST.lastError?HOST.lastError():""}catch(e){return ""}}
 function showErr(){var t=lastErr();$("sErrBox").style.display=t?"block":"none";$("sErr").textContent=t}
+if(BUBBLE){$("sHaRow").style.display="flex";var hv=lsGet("ddt_ha",35);$("sHa").value=hv;$("sHaV").textContent=hv+"%";
+  $("sHa").oninput=function(){lsSet("ddt_ha",+this.value);$("sHaV").textContent=this.value+"%"}}
 if(BUBBLE&&HOST&&HOST.resetBar){$("sBar").style.display="block";$("sBar").onclick=function(){HOST.resetBar()}}
 $("sErrClr").onclick=function(){try{HOST.clearError()}catch(e){}showErr()};
 /* ผลจากโหมดแผนที่จอสด (Bubble): fw = ความกว้างกรอบจอเป็น px จอจริง, จุดเป็นพิกัดจอ */
@@ -567,8 +570,9 @@ function hudRender(){
     [0,1,2,3,4,5].map(function(n){return '<button class="hk'+(n===S.wInt?" on":"")+'" data-wi="'+n+'">'+n+'</button>'}).join("");
   $("hW2").innerHTML=[0,1,2,3,4,5,6,7,8,9].map(function(n){return '<button class="hk'+(n===S.wDec?" on":"")+'" data-wd="'+n+'">.'+n+'</button>'}).join("");
 }
-window.ddtReload=function(){S=Object.assign(S,lsGet("ddt_state",{}));S.field="dist";M.fwr=lsGet("ddt_fwr",0);HI.key="";render()};
-if(HUD){document.body.classList.add("hud");
+function applyHa(){var v=lsGet("ddt_ha",35);$("hud").style.setProperty("--ha",v/100)}
+window.ddtReload=function(){applyHa();S=Object.assign(S,lsGet("ddt_state",{}));S.field="dist";M.fwr=lsGet("ddt_fwr",0);HI.key="";render()};
+if(HUD){document.body.classList.add("hud");applyHa();
   document.addEventListener("click",function(e){var b=e.target.closest("[data-hd]");if(b){S.wDir=+b.dataset.hd;render()}});
   $("hRes").onclick=function(){if(HOST&&HOST.openPanel)HOST.openPanel()};
   $("hX").onclick=function(){if(HOST&&HOST.close)HOST.close()};
