@@ -36,7 +36,7 @@ button:active{filter:brightness(1.35)}
 .chip b{font-size:14px;font-weight:600;line-height:1.2}.chip span{font-size:11px;color:var(--l2);line-height:1.2}
 .chip.on{background:var(--blue)}.chip.on span{color:#fff}
 .mseg{display:flex;padding:2px;border-radius:8px;background:var(--g2);gap:2px}
-.mseg button{height:24px;padding:0 8px;border-radius:6px;background:transparent;font-size:12px;color:var(--l2)}
+.mseg button{height:24px;padding:0 6px;border-radius:6px;background:transparent;font-size:12px;color:var(--l2)}
 .mseg button.on{background:var(--g5);color:#fff;font-weight:600}
 .fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .field{height:64px;border-radius:14px;background:var(--g1);border:2px solid var(--g1);text-align:left;padding:6px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px}
@@ -125,7 +125,7 @@ body.hud #hud{display:flex}
   <div class="view on" id="vCalc">
     <div class="col">
       <div class="card res">
-        <div class="row"><div class="mseg"><button id="mPick">เลือกมุม</button><button id="mHigh" aria-label="มุมสูง แตะซ้ำเพื่อเปลี่ยนแรงหลัก">มุมสูง</button><button id="mBack" aria-label="กลับหัว: หันหนีเป้า มุมเกิน 90 องศา">กลับหัว</button></div><span id="rStat" style="display:none"></span></div>
+        <div class="row"><div class="mseg"><button id="mPick">เลือกมุม</button><button id="mLow" aria-label="มุมต่ำ แตะซ้ำเพื่อสลับ 30 กับ 50 องศา">มุมต่ำ</button><button id="mHigh" aria-label="มุมสูง แตะซ้ำเพื่อเปลี่ยนแรงหลัก">มุมสูง</button><button id="mBack" aria-label="กลับหัว: หันหนีเป้า มุมเกิน 90 องศา">กลับหัว</button></div><span id="rStat" style="display:none"></span></div>
         <div style="display:flex;align-items:baseline;gap:10px"><span class="pw" id="rPow">—</span><span class="sub" id="rSub">ใส่ระยะก่อน</span></div>
         <svg width="222" height="54" viewBox="0 0 222 62" preserveAspectRatio="none" aria-hidden="true" style="margin-top:2px"><line x1="0" y1="61" x2="222" y2="61" stroke="#3A3A3C"/><path id="rPath" d="" fill="none" stroke="#0A84FF" stroke-width="2" stroke-dasharray="4 3"/><circle id="rS" r="4" fill="#5AC8FA" cx="-9" cy="-9"/><circle id="rT" r="5" fill="none" stroke="#FF9F0A" stroke-width="2" cx="-9" cy="-9"/></svg>
       </div>
@@ -256,10 +256,10 @@ window.ddtSolve=solve;window.ddtSim=sim;
 
 /* ---------- calc state ---------- */
 var ANGLES=[30,45,50,55,60,65,70,90];
-var S=Object.assign({field:"dist",dist:"",h:"",hSign:1,dir:1,wDir:1,wInt:0,wDec:0,angle:45,speed:3,mode:"pick",hiBase:95,back:false},lsGet("ddt_state",{}));
+var S=Object.assign({field:"dist",dist:"",h:"",hSign:1,dir:1,wDir:1,wInt:0,wDec:0,angle:45,speed:3,mode:"pick",hiBase:95,back:false,lowA:30},lsGet("ddt_state",{}));
 var HI={key:"",sel:null};
 S.field="dist";
-function save(){lsSet("ddt_state",{dist:S.dist,h:S.h,hSign:S.hSign,dir:S.dir,wDir:S.wDir,wInt:S.wInt,wDec:S.wDec,angle:S.angle,speed:S.speed,mode:S.mode,hiBase:S.hiBase,back:!!S.back})}
+function save(){lsSet("ddt_state",{dist:S.dist,h:S.h,hSign:S.hSign,dir:S.dir,wDir:S.wDir,wInt:S.wInt,wDec:S.wDec,angle:S.angle,speed:S.speed,mode:S.mode,hiBase:S.hiBase,back:!!S.back,lowA:S.lowA})}
 var KEYS=["7","8","9","⌫","4","5","6","C","1","2","3","±",".","0","สลับช่อง","เป้า ⇆"];
 function buildStatic(){
   $("keys").innerHTML=KEYS.map(function(k,i){var op=!/^[0-9.]$/.test(k);return '<button class="key'+(op?" op":"")+(k.length>2?" sm":"")+'" data-k="'+i+'"'+(k==="⌫"?' aria-label="ลบ"':'')+'>'+k+'</button>'}).join("");
@@ -289,7 +289,8 @@ function render(){
   [].forEach.call(document.querySelectorAll("[data-wi]"),function(b){b.classList.toggle("on",+b.dataset.wi===S.wInt)});
   [].forEach.call(document.querySelectorAll("[data-wd]"),function(b){b.classList.toggle("on",+b.dataset.wd===S.wDec)});
   [].forEach.call(document.querySelectorAll("[data-sp]"),function(b){b.classList.toggle("on",+b.dataset.sp===S.speed)});
-  $("mPick").classList.toggle("on",S.mode!=="high");$("mHigh").textContent="มุมสูง";
+  var low=S.mode==="low",LA=S.lowA===50?50:30;
+  $("mPick").classList.toggle("on",S.mode==="pick");$("mLow").classList.toggle("on",low);$("mLow").textContent=low?"มุมต่ำ "+LA:"มุมต่ำ";$("mHigh").textContent="มุมสูง";
   var back=S.mode==="high"&&!!S.back,FACE=back?-S.dir:S.dir;
   $("mHigh").classList.toggle("on",S.mode==="high"&&!back);$("mBack").classList.toggle("on",back);
   var angles=ANGLES,res={},ang=S.angle;
@@ -317,6 +318,11 @@ function render(){
       for(var q=0;q<ord.length;q++){if(res[ord[q]].err<=20){auto=ord[q];break}}}
     ang=HI.sel!=null&&angles.indexOf(HI.sel)>=0?HI.sel:auto;
     if(!back)$("mHigh").textContent="มุมสูง "+PB;
+  }else if(low){
+    /* มุมต่ำ: ล็อกมุม 30° หรือ 50° ให้แรงรับทั้งระยะและลม; แสดงทั้งสองมุมให้เทียบ */
+    angles=[30,50];ang=LA;
+    if(has)angles.forEach(function(a){res[a]=solve(a,S.dir,wind,tx,ty)});
+
   }else if(has){angles.forEach(function(a){res[a]=solve(a,S.dir,wind,tx,ty)})}
   $("chips").innerHTML=angles.map(function(a){var r=res[a];return '<button class="chip'+(a===ang?" on":"")+'" data-a="'+a+'"><b>'+a+'°</b><span>'+(r?r.p+"%"+(r.err>20?" ~":""):"—")+'</span></button>'}).join("");
   var pw=$("rPow"),st=$("rStat");
@@ -331,7 +337,7 @@ function render(){
   var X=function(x){return (ox+(x-x0)*k).toFixed(1)},Y=function(y){return (57-(y-y0)*k).toFixed(1)};
   $("rPath").setAttribute("d",pts.map(function(p,i){return (i?"L":"M")+X(p[0])+" "+Y(p[1])}).join(" "));
   mv("rS",X(0),Y(0));mv("rT",X(tx),Y(ty));
-  LAST={has:true,ang:ang,p:r.p,hit:hit,err:r.err,back:back};if(HUD)hudRender();
+  LAST={has:true,ang:ang,p:r.p,hit:hit,err:r.err,back:back,other:low?{a:LA===30?50:30,r:res[LA===30?50:30]}:null};if(HUD)hudRender();
 }
 function mv(id,x,y){$(id).setAttribute("cx",x);$(id).setAttribute("cy",y)}
 
@@ -457,11 +463,11 @@ document.addEventListener("click",function(e){
   else if(d.wi!=null){S.wInt=+d.wi;render()}
   else if(d.wd!=null){S.wDec=+d.wd;render()}
   else if(d.sp!=null){S.speed=+d.sp;render()}
-  else if(d.a!=null){if(S.mode==="high")HI.sel=+d.a;else S.angle=+d.a;render()}
+  else if(d.a!=null){if(S.mode==="high")HI.sel=+d.a;else if(S.mode==="low")S.lowA=+d.a;else S.angle=+d.a;render()}
   else if(d.st!=null){M.step=+d.st;drawMap()}
 });
 $("fDist").onclick=function(){S.field="dist";render()};$("fH").onclick=function(){S.field="h";render()};
-$("mPick").onclick=function(){S.mode="pick";render()};$("mBack").onclick=function(){S.back=S.mode==="high"?!S.back:true;S.mode="high";HI.key="";render()};$("mHigh").onclick=function(){if(S.mode==="high"&&S.back){S.back=false}else if(S.mode==="high"){S.hiBase=S.hiBase===95?100:S.hiBase===100?90:95;toast("แรงหลัก "+S.hiBase+"%",1200)}S.mode="high";HI.key="";render()};
+$("mPick").onclick=function(){S.mode="pick";render()};$("mLow").onclick=function(){if(S.mode==="low")S.lowA=S.lowA===50?30:50;else S.mode="low";render()};$("mBack").onclick=function(){S.back=S.mode==="high"?!S.back:true;S.mode="high";HI.key="";render()};$("mHigh").onclick=function(){if(S.mode==="high"&&S.back){S.back=false}else if(S.mode==="high"){S.hiBase=S.hiBase===95?100:S.hiBase===100?90:95;toast("แรงหลัก "+S.hiBase+"%",1200)}S.mode="high";HI.key="";render()};
 $("wL").onclick=function(){S.wDir=-1;render()};$("wR").onclick=function(){S.wDir=1;render()};
 $("tCalc").onclick=function(){setTab("calc")};$("tMap").onclick=function(){if(BUBBLE&&HOST&&HOST.pickLive){HOST.pickLive(String(M.fwr||0))}else setTab("map")};
 $("bShot").onclick=capture;$("bShot2").onclick=capture;
@@ -494,12 +500,12 @@ window.ddtPickDone=function(fw,sx,sy,tx,ty,sw){
   toast("ระยะ "+S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · ต่างระดับ "+(S.hSign>0?"+":"−")+S.h+" px",2600);
 };
 /* ---------- HUD (แถบผลลอยข้างลูกบอล) ---------- */
-function modeLabel(){return S.mode!=="high"?"เลือกมุม "+S.angle+"°":S.back?"กลับหัว":"มุมสูง "+(S.hiBase||95)}
+function modeLabel(){return S.mode==="low"?"มุมต่ำ "+(S.lowA===50?50:30):S.mode!=="high"?"เลือกมุม "+S.angle+"°":S.back?"กลับหัว":"มุมสูง "+(S.hiBase||95)}
 function hudRender(){
   var big=$("hBig"),sub=$("hSub");
   if(!LAST.has){big.textContent="—";big.style.color="#fff";sub.textContent="แตะลูกบอล แล้วแตะ ตัวเรา → เป้า"}
   else{big.textContent=LAST.ang+"° · "+LAST.p+"%";big.style.color=LAST.hit?"var(--green)":"var(--orange)";
-    sub.textContent=S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px"+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(LAST.hit?"":" · ไม่ถึง")}
+    sub.textContent=S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px"+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(S.mode==="low"&&LAST.other&&LAST.other.r?" · "+LAST.other.a+"° = "+LAST.other.r.p+"%":"")+(LAST.hit?"":" · ไม่ถึง")}
   $("hMode").textContent=modeLabel();
   $("hW1").innerHTML='<button class="hk dir'+(S.wDir<0?" on":"")+'" data-hd="-1" aria-label="ลมพัดซ้าย">←</button><button class="hk dir'+(S.wDir>0?" on":"")+'" data-hd="1" aria-label="ลมพัดขวา">→</button>'+
     [0,1,2,3,4,5].map(function(n){return '<button class="hk'+(n===S.wInt?" on":"")+'" data-wi="'+n+'">'+n+'</button>'}).join("");
@@ -510,7 +516,14 @@ if(HUD){document.body.classList.add("hud");
   document.addEventListener("click",function(e){var b=e.target.closest("[data-hd]");if(b){S.wDir=+b.dataset.hd;render()}});
   $("hRes").onclick=function(){if(HOST&&HOST.openPanel)HOST.openPanel()};
   $("hX").onclick=function(){if(HOST&&HOST.close)HOST.close()};
-  $("hMode").onclick=function(){if(S.mode!=="high"){S.mode="high";S.back=false}else if(!S.back){S.back=true}else{S.mode="pick";S.back=false}HI.key="";render()};
+  /* วนโหมด: มุมต่ำ 30 → มุมต่ำ 50 → มุมสูง → กลับหัว → เลือกมุม */
+  $("hMode").onclick=function(){
+    if(S.mode==="low"&&S.lowA!==50){S.lowA=50}
+    else if(S.mode==="low"){S.mode="high";S.back=false}
+    else if(S.mode==="high"&&!S.back){S.back=true}
+    else if(S.mode==="high"){S.mode="pick";S.back=false}
+    else{S.mode="low";S.lowA=30}
+    HI.key="";render()};
 }
 render();
 if(!BUBBLE&&!HUD&&lastErr())setTimeout(function(){toast("แอปเคยเกิดข้อผิดพลาด ดูรายละเอียดใน ตั้งค่า (เฟือง)",4000)},600);
