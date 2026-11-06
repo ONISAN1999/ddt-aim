@@ -53,7 +53,7 @@ public class BubbleService extends Service implements Bridge.Host {
     static boolean running = false;
     private static final int NID = 41;
     private static final String CH = "bubble";
-    private static final int BALL_DP = 56, HUD_W = 330, HUD_H = 132;
+    private static final int BALL_DP = 56, HUD_W = 330, HUD_H = 170;
 
     private WindowManager wm;
     private final Handler ui = new Handler(Looper.getMainLooper());
