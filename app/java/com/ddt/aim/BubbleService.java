@@ -424,32 +424,39 @@ public class BubbleService extends Service implements Bridge.Host {
         wm.addView(aim, lp);
     }
 
-    /** JSON from the HUD page: {p, hit, t:[tx,ty] battle px, pts:[[x,y],...] battle px from our tank, y up}. */
+    /** JSON from the HUD page: {t:[tx,ty] battle px, shots:[{p, a, col:"#RRGGBB", pts:[[x,y],...] battle px from our tank, y up}]}. */
     private void onAim(String json) {
         if (aim == null) return;
         if (json == null || json.length() == 0) { aim.clear(); return; }
         try {
             org.json.JSONObject o = new org.json.JSONObject(json);
-            int p = o.getInt("p");
-            boolean hit = o.optBoolean("hit");
-            float[] path = null;
-            float tx = -1, ty = -1;
-            org.json.JSONArray pts = o.optJSONArray("pts"), t = o.optJSONArray("t");
-            if (lastPick != null && pts != null && t != null) {
-                float k = lastPick[0] / 1000f, sx = lastPick[1], sy = lastPick[2];
+            org.json.JSONArray t = o.optJSONArray("t"), arr = o.optJSONArray("shots");
+            boolean onMap = false;
+            float k = 0, sx = 0, sy = 0;
+            if (lastPick != null && t != null) {
+                k = lastPick[0] / 1000f; sx = lastPick[1]; sy = lastPick[2];
                 // only when the calculator still holds the picked target
                 float btx = (lastPick[3] - sx) / k, bty = (sy - lastPick[4]) / k;
-                if (Math.abs(btx - t.getDouble(0)) < 15 && Math.abs(bty - t.getDouble(1)) < 15) {
+                onMap = Math.abs(btx - t.getDouble(0)) < 15 && Math.abs(bty - t.getDouble(1)) < 15;
+            }
+            java.util.List<AimOverlay.Shot> list = new java.util.ArrayList<>();
+            for (int n = 0; arr != null && n < arr.length(); n++) {
+                org.json.JSONObject sh = arr.getJSONObject(n);
+                float[] path = null;
+                org.json.JSONArray pts = sh.optJSONArray("pts");
+                if (onMap && pts != null) {
                     path = new float[pts.length() * 2];
                     for (int i = 0; i < pts.length(); i++) {
                         org.json.JSONArray q = pts.getJSONArray(i);
                         path[i * 2] = sx + (float) q.getDouble(0) * k;
                         path[i * 2 + 1] = sy - (float) q.getDouble(1) * k;
                     }
-                    tx = lastPick[3]; ty = lastPick[4];
                 }
+                int col;
+                try { col = android.graphics.Color.parseColor(sh.optString("col", "#30D158")); } catch (Exception e) { col = 0xFF30D158; }
+                list.add(new AimOverlay.Shot(sh.getInt("p"), sh.optInt("a"), col, path));
             }
-            aim.setAim(p, hit, path, tx, ty);
+            aim.setShots(list, onMap ? lastPick[3] : -1, onMap ? lastPick[4] : -1);
         } catch (Throwable e) {
             CrashLog.note("aim", e);
         }
