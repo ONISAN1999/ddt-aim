@@ -34,7 +34,37 @@ public class Updater {
         });
     }
 
-    static HttpURLConnection open(String url) throws Exception {
+    /** Fallback when github.com itself fails (seen: 504 on every page while the API still works). */
+    static final String API_LATEST = "https://api.github.com/repos/ONISAN1999/ddt-aim/releases/latest";
+    static volatile String apiApkUrl;          // API asset url of the newest APK, found by check()
+
+    static HttpURLConnection open(String url) throws Exception { return open(url, null); }
+
+    static String readAll(HttpURLConnection c) throws Exception {
+        InputStream in = c.getInputStream();
+        ByteArrayOutputStream bo = new ByteArrayOutputStream();
+        byte[] b = new byte[8192];
+        int n;
+        while ((n = in.read(b)) > 0) bo.write(b, 0, n);
+        in.close();
+        return bo.toString("UTF-8");
+    }
+
+    /** version.json through the GitHub API (assets are fetched with Accept: application/octet-stream). */
+    static String viaApi() throws Exception {
+        org.json.JSONObject rel = new org.json.JSONObject(readAll(open(API_LATEST, "application/vnd.github+json")));
+        org.json.JSONArray as = rel.getJSONArray("assets");
+        String ver = null;
+        for (int i = 0; i < as.length(); i++) {
+            org.json.JSONObject a = as.getJSONObject(i);
+            if ("version.json".equals(a.optString("name"))) ver = a.getString("url");
+            if ("ddt-aim.apk".equals(a.optString("name"))) apiApkUrl = a.getString("url");
+        }
+        if (ver == null) throw new Exception("no version.json asset");
+        return readAll(open(ver, "application/octet-stream"));
+    }
+
+    static HttpURLConnection open(String url, String accept) throws Exception {
         // follow redirects by hand (github.com -> objects.githubusercontent.com)
         for (int i = 0; i < 6; i++) {
             HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
@@ -43,6 +73,7 @@ public class Updater {
             c.setConnectTimeout(15000);
             c.setReadTimeout(30000);
             c.setRequestProperty("User-Agent", "ddt-aim-app");
+            if (accept != null && url.contains("api.github.com")) c.setRequestProperty("Accept", accept);
             int code = c.getResponseCode();
             if (code >= 300 && code < 400) {
                 String loc = c.getHeaderField("Location");
@@ -62,16 +93,10 @@ public class Updater {
             public void run() {
                 String s = "";
                 try {
-                    HttpURLConnection c = open(VERSION_URL + "?t=" + System.currentTimeMillis());
-                    InputStream in = c.getInputStream();
-                    ByteArrayOutputStream bo = new ByteArrayOutputStream();
-                    byte[] b = new byte[8192];
-                    int n;
-                    while ((n = in.read(b)) > 0) bo.write(b, 0, n);
-                    in.close();
-                    s = bo.toString("UTF-8");
+                    s = readAll(open(VERSION_URL + "?t=" + System.currentTimeMillis()));
+                    new org.json.JSONObject(s);                 // github.com error pages are HTML
                 } catch (Exception e) {
-                    s = "";
+                    try { s = viaApi(); } catch (Exception e2) { s = ""; }
                 }
                 js(w, "window.ddtUpdateInfo&&ddtUpdateInfo(" + JSONObject.quote(s) + ")");
             }
@@ -87,7 +112,16 @@ public class Updater {
             public void run() {
                 File f = apkFile(ctx);
                 try {
-                    HttpURLConnection c = open(url);
+                    HttpURLConnection c;
+                    try {
+                        c = open(url);
+                        String ct = c.getContentType();
+                        if (ct != null && ct.startsWith("text/html")) throw new Exception("html");   // error page, not the APK
+                    } catch (Exception e) {
+                        if (apiApkUrl == null) { try { viaApi(); } catch (Exception ignored) { } }
+                        if (apiApkUrl == null) throw e;
+                        c = open(apiApkUrl, "application/octet-stream");
+                    }
                     long total = c.getContentLength();
                     InputStream in = c.getInputStream();
                     OutputStream out = new FileOutputStream(f);
