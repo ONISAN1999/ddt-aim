@@ -73,10 +73,10 @@ public class AimOverlay extends View {
             p.moveTo(s.path[0] - ox, s.path[1] - oy);
             for (int i = 2; i + 1 < s.path.length; i += 2) p.lineTo(s.path[i] - ox, s.path[i + 1] - oy);
             line.setColor(0xCC000000);
-            line.setStrokeWidth(4.5f * d);
+            line.setStrokeWidth(s.power < 0 ? 3f * d : 4.5f * d);
             c.drawPath(p, line);
             line.setColor(s.color);
-            line.setStrokeWidth(2f * d);
+            line.setStrokeWidth(s.power < 0 ? 1.2f * d : 2f * d);   // side shots of a 3-shot spread: thin
             c.drawPath(p, line);
         }
         if (anyPath && tx >= 0) {
