@@ -303,8 +303,14 @@ public class BubbleService extends Service implements Bridge.Host {
                 PixelFormat.TRANSLUCENT);
         ballLp.gravity = Gravity.TOP | Gravity.LEFT;
         DisplayMetrics m = getResources().getDisplayMetrics();
-        ballLp.x = prefs.getInt("ballX", m.widthPixels - sz - dp(8));
+        // default: a bit in from the right edge, clear of the game's skill buttons
+        ballLp.x = prefs.getInt("ballX", m.widthPixels - sz - dp(110));
         ballLp.y = prefs.getInt("ballY", m.heightPixels / 3);
+        if (prefs.getInt("ballV", 0) < 2) {
+            // older versions snapped the ball to the screen edge: move it inwards once
+            if (ballLp.x > m.widthPixels - sz - dp(30)) ballLp.x = m.widthPixels - sz - dp(110);
+            prefs.edit().putInt("ballV", 2).putInt("ballX", ballLp.x).apply();
+        }
         ball.setOnTouchListener(new View.OnTouchListener() {
             float sx, sy;
             int ox, oy;
@@ -397,7 +403,8 @@ public class BubbleService extends Service implements Bridge.Host {
     private void snap() {
         DisplayMetrics m = real();
         int sz = dp(BALL_DP);
-        ballLp.x = (ballLp.x + sz / 2 < m.widthPixels / 2) ? dp(4) : m.widthPixels - sz - dp(4);
+        // no edge snapping: the ball stays where it is dropped (only kept on screen)
+        ballLp.x = Math.max(0, Math.min(m.widthPixels - sz, ballLp.x));
         ballLp.y = Math.max(0, Math.min(m.heightPixels - sz, ballLp.y));
         try { wm.updateViewLayout(ball, ballLp); } catch (Exception ignored) { }
         prefs.edit().putInt("ballX", ballLp.x).putInt("ballY", ballLp.y).apply();
