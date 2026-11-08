@@ -267,7 +267,7 @@ function solve(a,dir,w,tx,ty){var bp=0,bb=1e9,bt=0;for(var p=0;p<=100;p++){var s
 function autoPick(dir,w,tx,ty){
   var all=[];
   var near=null;
-  for(var a=20;a<=90;a++){var r=solveX(a,dir,w,tx,ty);if(!near||r.err<near.r.err)near={a:a,r:r};if(r.err>TOL())continue;
+  for(var a=(S.spread?12:20);a<=90;a++){var r=solveX(a,dir,w,tx,ty);   /* 3 นัด: หันขวารวมกันดีสุดที่มุมต่ำ ~18° */if(!near||r.err<near.r.err)near={a:a,r:r};if(r.err>TOL())continue;
     var e2=S.spread?(r.err<=40?0:99):(r.p>0?sim((r.p-1)*20,a,dir,w,tx,ty,false).best:r.err);all.push({a:a,r:r,sure:e2<=55})}
   var pool=all.filter(function(x){return x.sure});if(!pool.length)pool=all;
   /* 3 นัดแต่ไม่มีมุมที่โดนครบ: บอกมุมที่ใกล้ที่สุด พร้อมจำนวนนัดที่โดน */
