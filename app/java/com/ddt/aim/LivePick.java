@@ -91,8 +91,9 @@ public class LivePick extends View {
     /** 1 = enemy marker red, 2 = own/ally marker blue, 0 = anything else (the minimap is see-through). */
     private static int markerClass(int p) {
         int R = (p >> 16) & 255, G = (p >> 8) & 255, B = p & 255;
-        if (R >= 170 && G <= 90 && B <= 90 && R - Math.max(G, B) >= 110) return 1;
-        if (B >= 150 && R <= 90 && B - R >= 100 && B - G >= 40) return 2;
+        // markers are flat, fully saturated discs; map art (candy canes, ornaments) is shaded and duller
+        if (R >= 190 && G <= 70 && B <= 70 && R - Math.max(G, B) >= 150) return 1;
+        if (B >= 140 && R <= 50 && B - R >= 110 && B - G >= 70) return 2;
         return 0;
     }
 
@@ -141,18 +142,39 @@ public class LivePick extends View {
             int n0 = w * h;
             int[] cls = new int[n0];
             for (int i = 0; i < n0; i++) cls[i] = markerClass(px[i]);
+            // chessboard distance to the nearest pixel of another class: thick discs score high, stripes stay at 1
+            int[] dt = new int[n0];
+            for (int yy = 0; yy < h; yy++) for (int xx = 0; xx < w; xx++) {
+                int i = yy * w + xx, c0 = cls[i];
+                if (c0 == 0) continue;
+                int m = 1 + Math.min(xx == 0 ? 0 : (cls[i - 1] == c0 ? dt[i - 1] : 0),
+                        yy == 0 ? 0 : Math.min(cls[i - w] == c0 ? dt[i - w] : 0,
+                        Math.min(xx == 0 ? 0 : (cls[i - w - 1] == c0 ? dt[i - w - 1] : 0),
+                                 xx == w - 1 ? 0 : (cls[i - w + 1] == c0 ? dt[i - w + 1] : 0))));
+                dt[i] = m;
+            }
+            for (int yy = h - 1; yy >= 0; yy--) for (int xx = w - 1; xx >= 0; xx--) {
+                int i = yy * w + xx, c0 = cls[i];
+                if (c0 == 0) continue;
+                int m = 1 + Math.min(xx == w - 1 ? 0 : (cls[i + 1] == c0 ? dt[i + 1] : 0),
+                        yy == h - 1 ? 0 : Math.min(cls[i + w] == c0 ? dt[i + w] : 0,
+                        Math.min(xx == w - 1 ? 0 : (cls[i + w + 1] == c0 ? dt[i + w + 1] : 0),
+                                 xx == 0 ? 0 : (cls[i + w - 1] == c0 ? dt[i + w - 1] : 0))));
+                if (m < dt[i]) dt[i] = m;
+            }
             boolean[] seen = new boolean[n0];
             int[] q = new int[n0];
-            float[][] comps = new float[64][];      // {class, cx, cy}
+            float[][] comps = new float[64][];      // {class, cx, cy, pixels, solid 0/1}
             int nc = 0;
             for (int s0 = 0; s0 < n0 && nc < 64; s0++) {
                 if (cls[s0] == 0 || seen[s0]) continue;
-                int col = cls[s0], qh = 0, qt = 0, n = 0;
+                int col = cls[s0], qh = 0, qt = 0, n = 0, mx = 0;
                 int bx0 = w, bx1 = -1, by0 = h, by1 = -1;
                 q[qt++] = s0; seen[s0] = true;
                 while (qh < qt) {
                     int i = q[qh++], cx = i % w, cy = i / w;
                     n++;
+                    if (dt[i] > mx) mx = dt[i];
                     if (cx < bx0) bx0 = cx; if (cx > bx1) bx1 = cx;
                     if (cy < by0) by0 = cy; if (cy > by1) by1 = cy;
                     for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
@@ -163,20 +185,31 @@ public class LivePick extends View {
                     }
                 }
                 int bw = bx1 - bx0 + 1, bh = by1 - by0 + 1;
-                if (n < 4 || bw > r * 1.5f || bh > r * 1.5f) continue;
+                if (n < 6 || bw > r * 1.5f || bh > r * 1.5f) continue;
                 float ar = bw / (float) bh;
                 if (ar < 0.6f || ar > 1.67f) continue;
-                comps[nc++] = new float[]{col, (bx0 + bx1) / 2f, (by0 + by1) / 2f};
+                // a marker is a filled round disc: well filled box and a thick core
+                boolean solid = n >= 0.55f * bw * bh && mx >= 2 && mx >= 0.28f * Math.min(bw, bh);
+                // centre = middle of the thickest core (not the box: a disc touching art keeps its true centre)
+                float sx = 0, sy = 0;
+                int k = 0;
+                for (int t = 0; t < qt; t++) {
+                    int i = q[t];
+                    if (dt[i] >= mx - 1) { sx += i % w; sy += i / w; k++; }
+                }
+                comps[nc++] = new float[]{col, sx / k, sy / k, n, solid ? 1 : 0};
             }
             int pref = step == 2 ? 2 : 1;
             float bestCost = Float.MAX_VALUE;
             float[] pick = null;
             for (int i = 0; i < nc; i++) {
                 float[] a = comps[i];
-                boolean arrow = false;                // a same-colour marker just below => this is its arrow
+                if (a[4] == 0) continue;               // stripes, rings, fragments of map art
+                boolean arrow = false;                 // a bigger same-colour disc just below => this is its arrow
                 for (int j = 0; j < nc && !arrow; j++) {
                     float[] b = comps[j];
-                    if (j != i && b[0] == a[0] && Math.abs(b[1] - a[1]) < 6 * d && b[2] - a[2] > 0 && b[2] - a[2] < 14 * d) arrow = true;
+                    if (j != i && b[4] == 1 && b[0] == a[0] && b[3] > a[3] * 1.3f
+                            && Math.abs(b[1] - a[1]) < 6 * d && b[2] - a[2] > 0 && b[2] - a[2] < 14 * d) arrow = true;
                 }
                 if (arrow) continue;
                 float dd = (float) Math.hypot(a[1] - fx0, a[2] - fy0) * (a[0] == pref ? 1f : 1.6f);
