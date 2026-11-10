@@ -179,6 +179,9 @@ public class MainActivity extends Activity implements Bridge.Host {
     @Override
     public void resetBar() { }
 
+    @Override
+    public void hudHeight(int dp) { }
+
     private boolean installing = false;
     private long installAt = 0;
 

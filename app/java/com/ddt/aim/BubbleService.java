@@ -54,6 +54,7 @@ public class BubbleService extends Service implements Bridge.Host {
     private static final int NID = 41;
     private static final String CH = "bubble";
     private static final int BALL_DP = 56, HUD_W = 330, HUD_H = 170;
+    private int hudH = HUD_H;     // grows by one row in Auto (angle nudge)
 
     private WindowManager wm;
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -496,6 +497,7 @@ public class BubbleService extends Service implements Bridge.Host {
             public void install() { installViaMain(); }
             public void showAim(String json) { onAim(json); }
             public void resetBar() { doResetBar(); }
+            public void hudHeight(int h) { setHudHeight(h); }
         }), "DDT");
         hudWeb.setWebViewClient(new WebViewClient() {
             @Override
@@ -505,7 +507,7 @@ public class BubbleService extends Service implements Bridge.Host {
             }
         });
         hud.addView(hudWeb, new FrameLayout.LayoutParams(-1, -1));
-        hudLp = new WindowManager.LayoutParams(dp(HUD_W), dp(HUD_H), overlayType(),
+        hudLp = new WindowManager.LayoutParams(dp(HUD_W), dp(hudH), overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                 PixelFormat.TRANSLUCENT);
@@ -538,11 +540,20 @@ public class BubbleService extends Service implements Bridge.Host {
     private void placeHudLp() {
         if (ballLp == null) return;
         DisplayMetrics m = real();
-        int bs = dp(BALL_DP), hw = dp(HUD_W), hh = dp(HUD_H), g = dp(8);
+        int bs = dp(BALL_DP), hw = dp(HUD_W), hh = dp(hudH), g = dp(8);
         boolean right = ballLp.x + bs / 2 > m.widthPixels / 2;
         hudLp.x = right ? ballLp.x - hw - g : ballLp.x + bs + g;
         hudLp.x = Math.max(0, Math.min(m.widthPixels - hw, hudLp.x));
         hudLp.y = Math.max(0, Math.min(m.heightPixels - hh, ballLp.y + bs / 2 - hh / 2));
+    }
+
+    private void setHudHeight(int h) {
+        h = Math.max(120, Math.min(260, h));
+        if (h == hudH || hud == null) return;
+        hudH = h;
+        hudLp.height = dp(hudH);
+        placeHudLp();
+        try { wm.updateViewLayout(hud, hudLp); } catch (Exception ignored) { }
     }
 
     private void placeHud() {
@@ -649,6 +660,9 @@ public class BubbleService extends Service implements Bridge.Host {
 
     @Override
     public void resetBar() { doResetBar(); }
+
+    @Override
+    public void hudHeight(int h) { setHudHeight(h); }
 
     /** The overlay cannot rotate the screen: hand the install to the main screen, which turns portrait. */
     private void installViaMain() {
