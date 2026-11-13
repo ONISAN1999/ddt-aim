@@ -177,6 +177,25 @@ public class MapMatch {
     static Hit find(SharedPreferences prefs, String key, String lastId, int[] scr, int sw, int sh, int rx0, int ry0, float fw) {
         if (maps == null || maps.isEmpty()) return null;
         float R = prefs.getFloat(key + "R", -1), T = prefs.getFloat(key + "T", -1), F = prefs.getFloat(key + "F", -1);
+        if (F <= 0) {
+            // not learned yet: start from the spot measured on a 2576 × 1165 phone (right edge 48 units in, top 5 %,
+            // 0.80 minimap units per design unit), scaled to this screen; a good match confirms and stores it
+            int W = rx0 + sw, H = 2 * (ry0 + sh);
+            R = W * (1 - 48.5f / 1136); T = H * 0.0498f; F = 0.9125f * W / 2576f;
+            Hit h = null, s2 = null;
+            for (Tpl t : maps) {
+                Hit c = refine(t, scr, sw, sh, Math.round(R - t.pw * F) - rx0, Math.round(T) - ry0, 2, F, 0);
+                if (c == null) continue;
+                if (h == null || c.score > h.score) { s2 = h; h = c; } else if (s2 == null || c.score > s2.score) s2 = c;
+            }
+            if (h != null && h.score >= 0.88f && (s2 == null || h.score - s2.score >= 0.06f)) {
+                Hit fine = refine(h.t, scr, sw, sh, h.ox, h.oy, 2, F, 0.015f, 0.0025f);
+                if (fine != null && fine.score >= h.score) h = fine;
+                prefs.edit().putFloat(key + "R", rx0 + h.ox + h.t.pw * h.f).putFloat(key + "T", ry0 + h.oy).putFloat(key + "F", h.f).apply();
+                return finish(h, rx0, ry0);
+            }
+            F = -1;
+        }
         Hit best = null, second = null, lastHit = null;
         if (F > 0) {
             // known geometry: every map at the stored spot
@@ -212,6 +231,11 @@ public class MapMatch {
             Hit fine = refine(all.t, scr, sw, sh, all.ox, all.oy, 2, all.f, 0.015f, 0.0025f);
             if (fine != null && fine.score >= all.score) all = fine;
         }
+        if (all != null) {
+            int W = rx0 + sw, H0 = 2 * (ry0 + sh);   // the region is the top half of the screen
+            float right = rx0 + all.ox + all.t.pw * all.f, top = ry0 + all.oy, uk = 2 * all.f * 1136f / W;
+            if (right < W * (1 - 80f / 1136) || right > W * (1 - 20f / 1136) || top < H0 * 0.015f || top > H0 * 0.11f || uk < 0.55f || uk > 1.1f) all = null;
+        }
         if (all == null || all.score < 0.9f || (other != null && all.score - other.score < 0.05f)) {
             diag = (F > 0 ? diag + " · " : "") + "หาตำแหน่งมินิแมพ: ใกล้สุด " + (all == null ? "-" : all.t.name + " " + fmt(all.score)) + (other == null ? "" : " / " + other.t.name + " " + fmt(other.score)) + " · กรอบ " + Math.round(fw) + " px";
             return null;
@@ -234,10 +258,13 @@ public class MapMatch {
             Hit hb = null;
             // the game pins its minimap to the top-right corner (layout is FIXED_WIDTH: 1136 design units across):
             // right edge 10–90 units from the screen edge, top in the upper quarter of the screen
-            int W = rx0 + sw, H0 = ry0 + sh;
-            int oxMin = Math.max(0, Math.round(W * (1 - 90f / 1136)) - tw - rx0), oxMax = Math.min(sw - tw, Math.round(W * (1 - 10f / 1136)) - tw - rx0);
-            int oyMax = Math.min(sh - th, Math.round(H0 * 0.24f) - ry0);
-            for (int oy = 0; oy <= oyMax; oy += 3)
+            int W = rx0 + sw, H0 = 2 * (ry0 + sh);   // the region is the top half of the screen
+            // (seen on the phone: right edge 48 units from the screen edge, top at 5 % of the height)
+            float uk = 2 * f * 1136f / W;            // minimap units on screen ÷ design units: ~0.8
+            if (uk < 0.55f || uk > 1.1f) continue;
+            int oxMin = Math.max(0, Math.round(W * (1 - 75f / 1136)) - tw - rx0), oxMax = Math.min(sw - tw, Math.round(W * (1 - 25f / 1136)) - tw - rx0);
+            int oyMin = Math.max(0, Math.round(H0 * 0.02f) - ry0), oyMax = Math.min(sh - th, Math.round(H0 * 0.10f) - ry0);
+            for (int oy = oyMin; oy <= oyMax; oy += 3)
                 for (int ox = oxMin; ox <= oxMax; ox += 3) {
                     float s = score(t, n, scr, sw, sh, ox, oy, f, null);
                     if (hb == null || s > hb.score) { hb = new Hit(); hb.t = t; hb.score = s; hb.ox = ox; hb.oy = oy; hb.f = f; }

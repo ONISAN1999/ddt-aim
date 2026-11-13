@@ -382,6 +382,7 @@ public class BubbleService extends Service implements Bridge.Host {
         });
         wm.addView(ball, ballLp);
         addMini();
+        ui.post(new Runnable() { public void run() { updateMini(hudShown); } });
 
         trash = new TrashView(this);
         int ts = dp(68);
@@ -559,6 +560,71 @@ public class BubbleService extends Service implements Bridge.Host {
         setAimVisible(on);
     }
 
+    // two more small bubbles on the ball's outer side: ↻ (one-tap: find again · hold: tap by hand) and A (one-tap on/off)
+    private android.widget.TextView rfB, otB;
+    private WindowManager.LayoutParams rfLp, otLp;
+
+    private android.widget.TextView smallBubble(String txt, int sp) {
+        android.widget.TextView v = new android.widget.TextView(this);
+        v.setGravity(Gravity.CENTER);
+        v.setTextColor(Color.WHITE);
+        v.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp);
+        v.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        v.setIncludeFontPadding(false);
+        v.setText(txt);
+        v.setVisibility(View.GONE);
+        return v;
+    }
+
+    private WindowManager.LayoutParams smallLp() {
+        int sz = dp(MINI_DP);
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(sz, sz, overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.TOP | Gravity.LEFT;
+        return lp;
+    }
+
+    private void roundBg(View v, int color) {
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        bg.setColor(color);
+        bg.setStroke(dp(1.5f), 0xCCFFFFFF);
+        v.setBackground(bg);
+    }
+
+    private void addSideBubbles() {
+        rfB = smallBubble("↻", 19);
+        rfLp = smallLp();
+        rfB.setContentDescription("หาตัวเรา/เป้าใหม่ (กดค้าง = แตะเอง)");
+        rfB.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) { v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY); onBallTap(); }
+        });
+        rfB.setOnLongClickListener(new View.OnLongClickListener() {
+            public boolean onLongClick(View v) {
+                v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                prefs.edit().putBoolean("manualOnce", true).apply();
+                Toast.makeText(BubbleService.this, "ครั้งนี้แตะเอง: ตัวเรา → เป้า", Toast.LENGTH_SHORT).show();
+                onBallTap();
+                return true;
+            }
+        });
+        wm.addView(rfB, rfLp);
+        otB = smallBubble("A", 15);
+        otLp = smallLp();
+        otB.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                boolean on = !prefs.getBoolean("onetap", false);
+                prefs.edit().putBoolean("onetap", on).apply();
+                Toast.makeText(BubbleService.this, on ? "วัดแตะเดียว เปิด: แตะลูกบอลครั้งเดียว แอปหาตัวเรา+เป้าเอง" : "วัดแตะเดียว ปิด: แตะตัวเรา → เป้า เอง", Toast.LENGTH_SHORT).show();
+                updateMini(hudShown);
+                Updater.js(hudWeb, "window.render&&render()");
+            }
+        });
+        wm.addView(otB, otLp);
+    }
+
     private void addMini() {
         mini = new android.widget.TextView(this);
         mini.setGravity(Gravity.CENTER);
@@ -580,6 +646,7 @@ public class BubbleService extends Service implements Bridge.Host {
         });
         mini.setVisibility(View.GONE);
         wm.addView(mini, miniLp);
+        addSideBubbles();
     }
 
     /** The small bubble sits on the ball's top corner away from the control bar (never under it). */
@@ -593,12 +660,36 @@ public class BubbleService extends Service implements Bridge.Host {
         if (miniLp.y < 0) miniLp.y = ballLp.y + bs - ms * 2 / 3;
         miniLp.x = Math.max(0, Math.min(m.widthPixels - mw, miniLp.x));
         try { wm.updateViewLayout(mini, miniLp); } catch (Exception ignored) { }
+        // ↻ beside the ball's middle, A on the lower corner, both on the outer side
+        int sx = right ? ballLp.x + bs - ms / 3 : ballLp.x - ms * 2 / 3;
+        sx = Math.max(0, Math.min(m.widthPixels - ms, sx));
+        if (rfB != null) {
+            rfLp.x = sx; rfLp.y = ballLp.y + bs / 2 - ms / 2;
+            try { wm.updateViewLayout(rfB, rfLp); } catch (Exception ignored) { }
+        }
+        if (otB != null) {
+            otLp.x = right ? ballLp.x + bs - ms * 2 / 3 : ballLp.x - ms / 3;
+            otLp.x = Math.max(0, Math.min(m.widthPixels - ms, otLp.x));
+            otLp.y = Math.min(m.heightPixels - ms, ballLp.y + bs - ms / 3);
+            try { wm.updateViewLayout(otB, otLp); } catch (Exception ignored) { }
+        }
     }
 
     private void updateMini(boolean on) {
         if (mini == null) return;
         boolean show = on && ball != null && ball.getVisibility() == View.VISIBLE;
-        if (!show) { mini.setVisibility(View.GONE); return; }
+        boolean ballUp = ball != null && ball.getVisibility() == View.VISIBLE && pick == null && panel == null;
+        boolean ot = prefs.getBoolean("onetap", false);
+        if (otB != null) {
+            otB.setVisibility(ballUp ? View.VISIBLE : View.GONE);
+            roundBg(otB, ot ? 0xFF30D158 : 0xEE2C2C2E);
+            otB.setContentDescription(ot ? "วัดแตะเดียว: เปิด (แตะเพื่อปิด)" : "วัดแตะเดียว: ปิด (แตะเพื่อเปิด)");
+        }
+        if (rfB != null) {
+            rfB.setVisibility(ballUp && ot ? View.VISIBLE : View.GONE);
+            roundBg(rfB, 0xEE0A84FF);
+        }
+        if (!show) { mini.setVisibility(View.GONE); placeMini(); return; }
         // folded: a blue pill "+  ลม → 2.8" so the wind in use stays visible; open: a small round "−"
         boolean wide = hudMin && miniWind.length() > 0;
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
@@ -848,6 +939,8 @@ public class BubbleService extends Service implements Bridge.Host {
         pick.requestFocus();
         if (ball != null) ball.setVisibility(View.INVISIBLE);   // keep the ball off the minimap while picking
         if (mini != null) mini.setVisibility(View.GONE);
+        if (rfB != null) rfB.setVisibility(View.GONE);
+        if (otB != null) otB.setVisibility(View.GONE);
     }
 
     private void onFrame(ImageReader r, int w, int h) {
@@ -916,7 +1009,7 @@ public class BubbleService extends Service implements Bridge.Host {
                     int rx0 = (int) (w * 0.55f), sw = w - rx0, sh = (int) (h * 0.5f);
                     int[] scr = new int[sw * sh];
                     snap.getPixels(scr, 0, sw, rx0, 0, sw, sh);
-                    MapMatch.Hit hit = MapMatch.find(prefs, "mm" + w + "x" + h, lastMapId, scr, sw, sh, rx0, 0, fwUse);
+                    MapMatch.Hit hit = MapMatch.find(prefs, "mm2" + w + "x" + h, lastMapId, scr, sw, sh, rx0, 0, fwUse);
                     int x0, y0, x1, y1;
                     if (hit != null) {
                         x0 = Math.max(0, hit.ox - 6); y0 = Math.max(0, hit.oy - 6);
@@ -959,7 +1052,7 @@ public class BubbleService extends Service implements Bridge.Host {
                     int[] scr = new int[sw * sh];
                     snap.getPixels(scr, 0, sw, rx0, 0, sw, sh);
                     MapMatch.diag = "";
-                    MapMatch.Hit hit = MapMatch.find(prefs, "mm" + w + "x" + h, lastMapId, scr, sw, sh, rx0, 0, fw);
+                    MapMatch.Hit hit = MapMatch.find(prefs, "mm2" + w + "x" + h, lastMapId, scr, sw, sh, rx0, 0, fw);
                     org.json.JSONObject o = hit == null ? null : MapMatch.build(BubbleService.this, hit, snap, w, h);
                     if (o != null) lastMapId = hit.t.id;
                     js = "";
@@ -977,7 +1070,7 @@ public class BubbleService extends Service implements Bridge.Host {
                             });
                         }
                     }
-                    boolean cal = prefs.getFloat("mm" + w + "x" + h + "F", -1) > 0;
+                    boolean cal = prefs.getFloat("mm2" + w + "x" + h + "F", -1) > 0;
                     List<float[]> tg = autoTargets;
                     autoTargets = null;
                     if (tg != null && tg.size() > 0) {
@@ -1027,6 +1120,7 @@ public class BubbleService extends Service implements Bridge.Host {
             showPanel();
             if (js != null) Updater.js(panelWeb, js);
         }
+        updateMini(hudShown);
     }
 
     @Override
@@ -1034,11 +1128,11 @@ public class BubbleService extends Service implements Bridge.Host {
         running = false;
         collapse();
         if (pick != null) endPick(null);
-        for (View v : new View[]{ball, mini, trash, hud, aim}) {
+        for (View v : new View[]{ball, mini, rfB, otB, trash, hud, aim}) {
             if (v != null) { try { wm.removeView(v); } catch (Exception ignored) { } }
         }
         if (hudWeb != null) { try { hudWeb.destroy(); } catch (Exception ignored) { } }
-        ball = null; mini = null; trash = null; hud = null; hudWeb = null;
+        ball = null; mini = null; rfB = null; otB = null; trash = null; hud = null; hudWeb = null;
         if (proj != null) { try { proj.stop(); } catch (Exception ignored) { } proj = null; }
         super.onDestroy();
     }
