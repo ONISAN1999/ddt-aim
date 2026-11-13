@@ -207,7 +207,7 @@ public class MainActivity extends Activity implements Bridge.Host {
         super.onResume();
         if (installing && android.os.SystemClock.uptimeMillis() - installAt > 1500) {
             installing = false;
-            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         }
     }
 

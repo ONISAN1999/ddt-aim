@@ -85,7 +85,7 @@ body.setonly #ovSet .set{margin:auto}
 .sheet{width:380px;background:rgba(44,44,46,.98);border-radius:18px;padding:18px 18px 14px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.6)}
 .notes{background:var(--g1);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.6;color:#EBEBF5;white-space:pre-line;max-height:110px;overflow:auto}
 .bar{height:6px;border-radius:3px;background:var(--g3);overflow:hidden}.bar div{height:6px;background:var(--blue);width:0}
-.set{width:420px;display:flex;flex-direction:column;gap:8px}
+.set{width:min(420px,calc(100vw - 24px));display:flex;flex-direction:column;gap:8px}
 .srow{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:.5px solid var(--sep);font-size:15px}
 .srow:last-child{border-bottom:0}
 .sw{width:51px;height:31px;border-radius:16px;background:#39393D;padding:2px;display:flex}
@@ -250,7 +250,10 @@ var HOST=window.DDT||null;
 var BUBBLE=/[?&]bubble=1/.test(location.search),HUD=/[?&]hud=1/.test(location.search);
 var LAST={has:false},LAST_HINT=null;
 var W=844,H=390;
-function fit(){var s=Math.min(innerWidth/W,innerHeight/H),st=$("stage");st.style.transform="translate("+((innerWidth-W*s)/2)+"px,"+((innerHeight-H*s)/2)+"px) scale("+s+")";}
+function fit(){var st=$("stage");
+  /* หน้าตั้งค่า (แนวตั้ง): ใช้ขนาดจอจริง ไม่ย่อทั้งหน้า */
+  if(document.body.classList.contains("setonly")){st.style.transform="none";st.style.width=innerWidth+"px";st.style.height=innerHeight+"px";return}
+  var s=Math.min(innerWidth/W,innerHeight/H);st.style.transform="translate("+((innerWidth-W*s)/2)+"px,"+((innerHeight-H*s)/2)+"px) scale("+s+")";}
 addEventListener("resize",fit);fit();
 function lsGet(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
@@ -621,7 +624,7 @@ $("uGo").onclick=function(){if(!HOST)return;U.phase="dl";upView();HOST.downloadU
 $("uInst").onclick=function(){if(HOST)HOST.installUpdate()};
 $("uWeb").onclick=function(){var u=U.info&&U.info.apk||"https://github.com/ONISAN1999/ddt-aim/releases/latest/download/ddt-aim.apk";
   if(HOST&&HOST.openUrl){HOST.openUrl(u);toast("เปิดเบราว์เซอร์แล้ว: รอดาวน์โหลดเสร็จ แตะไฟล์แล้วกดติดตั้ง",5000)}else location.href=u};
-if(!HUD&&HOST){document.body.classList.add("setonly");
+if(!HUD&&HOST){document.body.classList.add("setonly");setTimeout(fit,0);
   /* หน้าแอปและแผงเต็มของ Bubble = หน้าตั้งค่าอย่างเดียว · ใช้งานจริงที่แถบผลลอยของ Bubble */
   if(BUBBLE){$("sClose").textContent="ปิด";$("sClose").onclick=function(){if(HOST.close)HOST.close()}}
   else{$("sClose").textContent="เปิด / ปิด Bubble";$("sClose").classList.add("pri");$("sClose").style.width="220px";$("sClose").style.alignSelf="center";

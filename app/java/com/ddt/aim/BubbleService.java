@@ -660,18 +660,17 @@ public class BubbleService extends Service implements Bridge.Host {
         if (miniLp.y < 0) miniLp.y = ballLp.y + bs - ms * 2 / 3;
         miniLp.x = Math.max(0, Math.min(m.widthPixels - mw, miniLp.x));
         try { wm.updateViewLayout(mini, miniLp); } catch (Exception ignored) { }
-        // ↻ and A in a column straight under the ball (above it when the ball sits low on the screen)
-        int g = dp(4), cx = ballLp.x + bs / 2 - ms / 2;
-        cx = Math.max(0, Math.min(m.widthPixels - ms, cx));
-        boolean below = ballLp.y + bs + 2 * (ms + g) <= m.heightPixels;
-        int y1 = below ? ballLp.y + bs + g : ballLp.y - ms - g, y2 = below ? y1 + ms + g : y1 - ms - g;
+        // ↻ beside the ball's middle, A on the lower corner, both on the outer side
+        int sx = right ? ballLp.x + bs - ms / 3 : ballLp.x - ms * 2 / 3;
+        sx = Math.max(0, Math.min(m.widthPixels - ms, sx));
         if (rfB != null) {
-            rfLp.x = cx; rfLp.y = Math.max(0, y1);
+            rfLp.x = sx; rfLp.y = ballLp.y + bs / 2 - ms / 2;
             try { wm.updateViewLayout(rfB, rfLp); } catch (Exception ignored) { }
         }
         if (otB != null) {
-            boolean rfShown = rfB != null && rfB.getVisibility() == View.VISIBLE;
-            otLp.x = cx; otLp.y = Math.max(0, rfShown ? y2 : y1);
+            otLp.x = right ? ballLp.x + bs - ms * 2 / 3 : ballLp.x - ms / 3;
+            otLp.x = Math.max(0, Math.min(m.widthPixels - ms, otLp.x));
+            otLp.y = Math.min(m.heightPixels - ms, ballLp.y + bs - ms / 3);
             try { wm.updateViewLayout(otB, otLp); } catch (Exception ignored) { }
         }
     }
