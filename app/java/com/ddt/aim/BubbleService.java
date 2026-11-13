@@ -228,7 +228,7 @@ public class BubbleService extends Service implements Bridge.Host {
         running = true;
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         prefs = getSharedPreferences("ddt", MODE_PRIVATE);
-        new Thread(new Runnable() { public void run() { MapMatch.load(BubbleService.this); } }).start();   // warm the map templates
+        if (MAP_MATCH) new Thread(new Runnable() { public void run() { MapMatch.load(BubbleService.this); } }).start();   // warm the map templates
         try {
             addAim();
             addHud();
@@ -681,12 +681,12 @@ public class BubbleService extends Service implements Bridge.Host {
         boolean ballUp = ball != null && ball.getVisibility() == View.VISIBLE && pick == null && panel == null;
         boolean ot = prefs.getBoolean("onetap", false);
         if (otB != null) {
-            otB.setVisibility(ballUp ? View.VISIBLE : View.GONE);
+            otB.setVisibility(AUTO_PICK && ballUp ? View.VISIBLE : View.GONE);
             roundBg(otB, ot ? 0xFF30D158 : 0xEE2C2C2E);
             otB.setContentDescription(ot ? "วัดแตะเดียว: เปิด (แตะเพื่อปิด)" : "วัดแตะเดียว: ปิด (แตะเพื่อเปิด)");
         }
         if (rfB != null) {
-            rfB.setVisibility(ballUp && ot ? View.VISIBLE : View.GONE);
+            rfB.setVisibility(AUTO_PICK && ballUp && ot ? View.VISIBLE : View.GONE);
             roundBg(rfB, 0xEE0A84FF);
         }
         if (!show) { mini.setVisibility(View.GONE); placeMini(); return; }
@@ -902,7 +902,7 @@ public class BubbleService extends Service implements Bridge.Host {
             return;
         }
         pickToHud = toHud;
-        autoTry = toHud && prefs.getBoolean("onetap", false) && !prefs.getBoolean("manualOnce", false);
+        autoTry = AUTO_PICK && toHud && prefs.getBoolean("onetap", false) && !prefs.getBoolean("manualOnce", false);
         prefs.edit().putBoolean("manualOnce", false).apply();
         autoTargets = null;
         shownTargets = null;
@@ -995,6 +995,8 @@ public class BubbleService extends Service implements Bridge.Host {
     }
 
     private String lastMapId;
+    /** Paused at the person's request (v5.3): one-tap point finding and map recognition. Wind reading stays. */
+    static final boolean AUTO_PICK = false, MAP_MATCH = false;
     private volatile boolean autoTry;
     private volatile List<float[]> autoTargets;
 
@@ -1080,6 +1082,17 @@ public class BubbleService extends Service implements Bridge.Host {
         new Thread(new Runnable() {
             public void run() {
                 String js;
+                if (!MAP_MATCH) {
+                    js = "";
+                    try {
+                        WindRead.Result wr = WindRead.read(BubbleService.this, snap, w, h);
+                        if (wr != null) js = "window.ddtWind&&ddtWind(" + wr.whole + "," + wr.tenth + "," + wr.dir + "," + wr.conf + ")";
+                    } catch (Throwable t) { CrashLog.note("wind", t); }
+                    snap.recycle();
+                    final String code = js;
+                    if (code.length() > 0) ui.post(new Runnable() { public void run() { Updater.js(hudWeb, code); Updater.js(panelWeb, code); } });
+                    return;
+                }
                 try {
                     MapMatch.load(BubbleService.this);
                     int rx0 = (int) (w * 0.55f), sw = w - rx0, sh = (int) (h * 0.5f);

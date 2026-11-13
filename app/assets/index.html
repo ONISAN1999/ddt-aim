@@ -282,7 +282,8 @@ function solve(a,dir,w,tx,ty){var bp=0,bb=1e9,bt=0;for(var p=0;p<=100;p++){var s
    PK: จุดที่แตะ (px จอ) ตอนวัด + คีย์ของระยะ/ความสูง เพื่อรู้ว่าตัวเลขบนเครื่องคิดเลขยังเป็นของการวัดนั้น */
 var MAPD=null,PK=lsGet("ddt_pk",null);
 function mapLoad(o){MAPD=null;if(!o||!o.bits)return;try{var b=atob(o.bits),u=new Uint8Array(b.length);for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);o.u=u;MAPD=o}catch(e){}}
-mapLoad(lsGet("ddt_map",null));
+/* จดจำด่านพักไว้ (v5.3): ล้างข้อมูลด่านเก่า */
+try{localStorage.removeItem("ddt_map");localStorage.removeItem("ddt_mapwhy")}catch(e){}
 function pkKey(){return [S.dist,S.h,S.hSign,S.dir].join("|")}
 function wallOn(){return !!(MAPD&&PK&&PK.key===pkKey()&&PK.fw>3)}
 function solidAt(X,Y){var x=Math.round(X-MAPD.ox),y=Math.round(Y-MAPD.oy);if(x<0||y<0||x>=MAPD.w||y>=MAPD.h)return false;var i=y*MAPD.w+x;return (MAPD.u[i>>3]>>(i&7)&1)===1}
@@ -631,7 +632,7 @@ if(!HUD&&HOST){document.body.classList.add("setonly");setTimeout(fit,0);
     $("sClose").onclick=function(){if(HOST.toggleBubble)HOST.toggleBubble()};
     var st=$("sClose").parentNode;st.insertBefore($("sClose"),st.firstChild);$("sClose").style.height="48px";$("sClose").style.width="100%"}
   $("sHaRow").style.display="flex";var hv0=lsGet("ddt_ha",35);$("sHa").value=hv0;$("sHaV").textContent=hv0+"%";
-  if(HOST.setOneTap){$("sOneBox").style.display="";var otSet=function(v){$("sOne").classList.toggle("on",v)};otSet(!!HOST.oneTap());
+  if(false&&HOST.setOneTap){$("sOneBox").style.display="";var otSet=function(v){$("sOne").classList.toggle("on",v)};otSet(!!HOST.oneTap());
     $("sOne").onclick=function(){var v=!HOST.oneTap();HOST.setOneTap(v);otSet(v);toast(v?"วัดแตะเดียว เปิด: แตะลูกบอลครั้งเดียวพอ":"วัดแตะเดียว ปิด: แตะตัวเรา → เป้า เอง",1800)}}
   setTimeout(function(){$("bSet").onclick()},0)}
 if(BUBBLE){document.body.classList.add("bubble");$("bClose").style.display="flex";if(HOST)$("bClose").style.visibility="hidden";$("bClose").onclick=function(){if(HOST&&HOST.close)HOST.close()};$("bShot2").textContent="จับภาพจอสด"}
@@ -713,7 +714,7 @@ function hudRender(){
   $("hW2").innerHTML=[0,1,2,3,4,5,6,7,8,9].map(function(n){return '<button class="hk'+(n===S.wDec?" on":"")+'" data-wd="'+n+'">.'+n+'</button>'}).join("");
 }
 function applyHa(){var v=lsGet("ddt_ha",35);$("hud").style.setProperty("--ha",v/100)}
-window.ddtReload=function(){applyHa();S=Object.assign(S,lsGet("ddt_state",{}));PK=lsGet("ddt_pk",null);mapLoad(lsGet("ddt_map",null));S.field="dist";M.fwr=lsGet("ddt_fwr",0);HI.key="";render()};
+window.ddtReload=function(){applyHa();S=Object.assign(S,lsGet("ddt_state",{}));PK=lsGet("ddt_pk",null);S.field="dist";M.fwr=lsGet("ddt_fwr",0);HI.key="";render()};
 if(HUD){document.documentElement.classList.add("hud");document.body.classList.add("hud");applyHa();
   document.addEventListener("click",function(e){var b=e.target.closest("[data-hd]");if(b){S.wDir=+b.dataset.hd;render()}});
   $("hRes").onclick=function(){if(HOST&&HOST.openPanel)HOST.openPanel()};
