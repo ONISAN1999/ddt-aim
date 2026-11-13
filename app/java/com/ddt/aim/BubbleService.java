@@ -72,6 +72,10 @@ public class BubbleService extends Service implements Bridge.Host {
     private WebView hudWeb;
     private WindowManager.LayoutParams hudLp;
     private boolean hudShown = false;
+    private boolean hudMin = false;            // control bar folded away, shot lines stay on screen
+    private android.widget.TextView mini;      // small bubble: fold / unfold the control bar
+    private WindowManager.LayoutParams miniLp;
+    private static final int MINI_DP = 34;
 
     private Panel panel;
     private WebView panelWeb;
@@ -342,6 +346,7 @@ public class BubbleService extends Service implements Bridge.Host {
                         if (moved && ball != null) {
                             ballLp.x = ox + (int) dx; ballLp.y = oy + (int) dy;
                             try { wm.updateViewLayout(ball, ballLp); } catch (Exception ignored) { }
+                            placeMini();
                             trash.setHot(overTrash());
                             placeHud();
                         }
@@ -368,6 +373,7 @@ public class BubbleService extends Service implements Bridge.Host {
             }
         });
         wm.addView(ball, ballLp);
+        addMini();
 
         trash = new TrashView(this);
         int ts = dp(68);
@@ -410,6 +416,7 @@ public class BubbleService extends Service implements Bridge.Host {
         try { wm.updateViewLayout(ball, ballLp); } catch (Exception ignored) { }
         prefs.edit().putInt("ballX", ballLp.x).putInt("ballY", ballLp.y).apply();
         placeHud();
+        placeMini();
     }
 
     private void onBallTap() {
@@ -490,7 +497,7 @@ public class BubbleService extends Service implements Bridge.Host {
         s.setAllowFileAccess(true);
         hudWeb.addJavascriptInterface(new Bridge(this, hudWeb, new Bridge.Host() {
             public void toggleBubble() { stopSelf(); }
-            public void close() { hudShown = false; setHudVisible(false); }
+            public void close() { hudShown = false; hudMin = false; setHudVisible(false); }
             public void capture() { onBallTap(); }
             public void pickLive(float fwr) { onBallTap(); }
             public void openPanel() { try { expand(); } catch (Throwable t) { CrashLog.note("expand", t); collapse(); } }
@@ -529,12 +536,65 @@ public class BubbleService extends Service implements Bridge.Host {
     /** Hidden HUD stays loaded but lets touches through to the game. */
     private void setHudVisible(boolean on) {
         if (hud == null) return;
-        if (on) hudLp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        boolean bar = on && !hudMin;           // folded: the bar hides, the aim lines stay
+        updateMini(on);
+        if (bar) hudLp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         else hudLp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
         placeHudLp();
         try { wm.updateViewLayout(hud, hudLp); } catch (Exception ignored) { }
-        hud.setVisibility(on ? View.VISIBLE : View.INVISIBLE);
+        hud.setVisibility(bar ? View.VISIBLE : View.INVISIBLE);
         setAimVisible(on);
+    }
+
+    private void addMini() {
+        mini = new android.widget.TextView(this);
+        mini.setGravity(Gravity.CENTER);
+        mini.setTextColor(Color.WHITE);
+        mini.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 20);
+        mini.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        mini.setIncludeFontPadding(false);
+        int sz = dp(MINI_DP);
+        miniLp = new WindowManager.LayoutParams(sz, sz, overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        miniLp.gravity = Gravity.TOP | Gravity.LEFT;
+        mini.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+                hudMin = !hudMin;
+                setHudVisible(true);
+            }
+        });
+        mini.setVisibility(View.GONE);
+        wm.addView(mini, miniLp);
+    }
+
+    /** The small bubble sits on the ball's top corner away from the control bar (never under it). */
+    private void placeMini() {
+        if (mini == null || ballLp == null) return;
+        DisplayMetrics m = real();
+        int bs = dp(BALL_DP), ms = dp(MINI_DP);
+        boolean right = ballLp.x + bs / 2 > m.widthPixels / 2;
+        miniLp.x = right ? ballLp.x + bs - ms * 2 / 3 : ballLp.x - ms / 3;
+        miniLp.y = ballLp.y - ms / 3;
+        if (miniLp.y < 0) miniLp.y = ballLp.y + bs - ms * 2 / 3;
+        miniLp.x = Math.max(0, Math.min(m.widthPixels - ms, miniLp.x));
+        try { wm.updateViewLayout(mini, miniLp); } catch (Exception ignored) { }
+    }
+
+    private void updateMini(boolean on) {
+        if (mini == null) return;
+        boolean show = on && ball != null && ball.getVisibility() == View.VISIBLE;
+        if (!show) { mini.setVisibility(View.GONE); return; }
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        bg.setColor(hudMin ? 0xFF0A84FF : 0xEE2C2C2E);
+        bg.setStroke(dp(1.5f), 0xCCFFFFFF);
+        mini.setBackground(bg);
+        mini.setText(hudMin ? "+" : "−");
+        mini.setContentDescription(hudMin ? "ขยายแผงควบคุม" : "ย่อแผงควบคุม (เส้นแรงยังแสดงอยู่)");
+        placeMini();
+        mini.setVisibility(View.VISIBLE);
     }
 
     private void placeHudLp() {
@@ -634,6 +694,7 @@ public class BubbleService extends Service implements Bridge.Host {
             if (hudShown) setHudVisible(true);
         }
         if (ball != null) ball.setVisibility(View.VISIBLE);
+        updateMini(hudShown);
     }
 
     private void hidePanel() { if (panel != null) panel.setVisibility(View.GONE); }
@@ -747,6 +808,7 @@ public class BubbleService extends Service implements Bridge.Host {
         wm.addView(pick, lp);
         pick.requestFocus();
         if (ball != null) ball.setVisibility(View.INVISIBLE);   // keep the ball off the minimap while picking
+        if (mini != null) mini.setVisibility(View.GONE);
     }
 
     private void onFrame(ImageReader r, int w, int h) {
@@ -804,6 +866,7 @@ public class BubbleService extends Service implements Bridge.Host {
             if (js != null) {
                 Updater.js(hudWeb, js);
                 hudShown = true;
+                hudMin = false;                // new target: show the bar for wind entry
             }
             if (hudShown) setHudVisible(true);
         } else {
@@ -817,11 +880,11 @@ public class BubbleService extends Service implements Bridge.Host {
         running = false;
         collapse();
         if (pick != null) endPick(null);
-        for (View v : new View[]{ball, trash, hud, aim}) {
+        for (View v : new View[]{ball, mini, trash, hud, aim}) {
             if (v != null) { try { wm.removeView(v); } catch (Exception ignored) { } }
         }
         if (hudWeb != null) { try { hudWeb.destroy(); } catch (Exception ignored) { } }
-        ball = null; trash = null; hud = null; hudWeb = null;
+        ball = null; mini = null; trash = null; hud = null; hudWeb = null;
         if (proj != null) { try { proj.stop(); } catch (Exception ignored) { } proj = null; }
         super.onDestroy();
     }
