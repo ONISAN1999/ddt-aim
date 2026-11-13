@@ -14,8 +14,11 @@ import java.util.List;
  */
 public class AutoPick {
     public static class Res {
-        public float sx, sy;                       // our marker (screen px)
-        public List<float[]> enemies = new ArrayList<>();   // nearest first
+        public float sx = Float.NaN, sy = Float.NaN;          // our marker (screen px), NaN when not found
+        public List<float[]> enemies = new ArrayList<>();     // nearest first
+        public List<float[]> blues = new ArrayList<>(), reds = new ArrayList<>();   // every disc {x, y, r} for tap snapping
+        public int x0, y0, x1, y1;                           // the area searched (the minimap)
+        public boolean ok() { return !Float.isNaN(sx) && !enemies.isEmpty(); }
     }
 
     static class Disc { int col; float cx, cy, r; int n; boolean arrow; float ring; }
@@ -65,8 +68,13 @@ public class AutoPick {
             d.ring = blueness(p, w, h, d, 1.5f, 2.1f) - blueness(p, w, h, d, 2.7f, 3.3f);
             if (d.ring >= 25 && (self == null || d.ring > self.ring)) self = d;
         }
-        if (self == null) return null;
         Res r = new Res();
+        r.x0 = x0; r.y0 = y0; r.x1 = x1; r.y1 = y1;
+        for (Disc d : discs) if (!d.arrow) (d.col == 2 ? r.blues : r.reds).add(new float[]{x0 + d.cx + 0.5f, y0 + d.cy + 0.5f, d.r});
+        if (self == null) {
+            for (Disc d : discs) if (!d.arrow && d.col == 1) r.enemies.add(new float[]{x0 + d.cx + 0.5f, y0 + d.cy + 0.5f});
+            return r;
+        }
         r.sx = x0 + self.cx + 0.5f; r.sy = y0 + self.cy + 0.5f;
         final float fx = self.cx, fy = self.cy;
         List<Disc> en = new ArrayList<>();
@@ -77,7 +85,7 @@ public class AutoPick {
             }
         });
         for (Disc d : en) r.enemies.add(new float[]{x0 + d.cx + 0.5f, y0 + d.cy + 0.5f});
-        return r.enemies.isEmpty() ? null : r;
+        return r;
     }
 
     /** Median of B − (R+G)/2 on rings between k1·r and k2·r around the disc. */

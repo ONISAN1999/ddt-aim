@@ -1003,6 +1003,7 @@ public class BubbleService extends Service implements Bridge.Host {
         new Thread(new Runnable() {
             public void run() {
                 AutoPick.Res res = null;
+                Bitmap crop = null;
                 float fwUse = prefs.getFloat("fwr", 0) * w;
                 try {
                     MapMatch.load(BubbleService.this);
@@ -1019,26 +1020,59 @@ public class BubbleService extends Service implements Bridge.Host {
                         x0 = (int) (w * 0.72f); y0 = (int) (h * 0.048f); x1 = w; y1 = (int) (h * 0.30f);   // below the minimap title bar (its red power button)
                     }
                     res = AutoPick.detect(snap, x0, y0, x1, y1, w / 2576f);
+                    if (res != null) crop = Bitmap.createBitmap(snap, res.x0, res.y0, res.x1 - res.x0, res.y1 - res.y0);
                 } catch (Throwable t) {
                     CrashLog.note("auto", t);
                 }
                 snap.recycle();
                 final AutoPick.Res r = res;
                 final float fwF = fwUse;
+                final Bitmap cr = crop;
                 ui.post(new Runnable() {
                     public void run() {
-                        if (pick == null) return;
-                        if (r == null || fwF <= 3) {
-                            Toast.makeText(BubbleService.this, fwF <= 3 ? "วัดแตะเดียว: ยังไม่มีค่ากรอบ แตะเองครั้งนี้" : "วัดแตะเดียว: หาตัวเรา/เป้าไม่เจอ แตะเองครั้งนี้", Toast.LENGTH_SHORT).show();
+                        if (pick == null) { if (cr != null) cr.recycle(); return; }
+                        if (r == null || cr == null || fwF <= 3) {
+                            Toast.makeText(BubbleService.this, fwF <= 3 ? "วัดแตะเดียว: ยังไม่มีค่ากรอบ แตะเองครั้งนี้" : "วัดแตะเดียว: ไม่เจอมินิแมพ แตะเองครั้งนี้", Toast.LENGTH_SHORT).show();
+                            if (cr != null) cr.recycle();
                             return;
                         }
-                        autoTargets = r.enemies;
-                        float[] t = r.enemies.get(0);
-                        pick.autoDone(fwF, r.sx, r.sy, t[0], t[1]);
+                        showZoom(cr, r, fwF);
                     }
                 });
             }
         }).start();
+    }
+
+    private ZoomPick zoomV;
+
+    /** The minimap drawn large with what was found preset; "ตกลง" finishes the measurement. */
+    private void showZoom(final Bitmap crop, final AutoPick.Res r, final float fw) {
+        closeZoom();
+        zoomV = new ZoomPick(this, crop, r, new ZoomPick.Cb() {
+            public void done(float sx, float sy, float tx, float ty) {
+                // the chosen enemy first, the others after it (the "เป้า n/N" button walks this list)
+                List<float[]> en = new java.util.ArrayList<>();
+                en.add(new float[]{tx, ty});
+                for (float[] e : r.enemies) if (Math.hypot(e[0] - tx, e[1] - ty) > 3) en.add(e);
+                autoTargets = en;
+                closeZoom();
+                if (pick != null) pick.autoDone(fw, sx, sy, tx, ty);
+            }
+            public void cancel() {
+                closeZoom();
+                Toast.makeText(BubbleService.this, "แตะบนจอจริง: ตัวเรา → เป้า", Toast.LENGTH_SHORT).show();
+            }
+        });
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(-1, -1, overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.TOP | Gravity.LEFT;
+        if (Build.VERSION.SDK_INT >= 28) lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        try { wm.addView(zoomV, lp); } catch (Exception e) { CrashLog.note("zoom", e); zoomV = null; }
+    }
+
+    private void closeZoom() {
+        if (zoomV != null) { try { wm.removeView(zoomV); } catch (Exception ignored) { } zoomV = null; }
     }
 
     /** Which map is this, where is its minimap, and which ground is still standing (background thread). */
@@ -1103,6 +1137,7 @@ public class BubbleService extends Service implements Bridge.Host {
     }
 
     private void endPick(String js) {
+        closeZoom();
         if (pick != null) {
             try { wm.removeView(pick); } catch (Exception ignored) { }
             pick = null;
