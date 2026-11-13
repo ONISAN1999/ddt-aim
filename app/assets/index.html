@@ -291,6 +291,11 @@ function wallHit(F,a,dir,w,tx,ty,goff){
 window.ddtMap=function(o){PK=lsGet("ddt_pk",PK);mapLoad(o);try{if(o)lsSet("ddt_map",o);else localStorage.removeItem("ddt_map")}catch(e){}
   HI.key="";render();
   if(o)toast("ด่าน "+o.name+" · ตรวจสิ่งกีดขวางแล้ว",1800);else if(PK&&HUD)toast("ไม่รู้จักด่านนี้: ไม่ได้ตรวจสิ่งกีดขวาง",2200)};
+/* ลมจากป้ายบนจอ (แอปอ่านตอนแตะวัด): ค่า whole.tenth, ทิศ +1 ขวา / −1 ซ้าย, conf 0–1 */
+window.ddtWind=function(wi,wd,dir,conf){
+  if(!(conf>=0.75)){toast("อ่านลมบนจอไม่ชัด ใช้ค่าลมเดิม เช็คอีกที",2200);return}
+  S.wInt=wi;S.wDec=wd;if(dir&&(wi||wd))S.wDir=dir;HI.key="";render();
+  toast("ลม "+(wi||wd?(S.wDir>0?"→ ":"← "):"")+wi+(wd?"."+wd:"")+" (อ่านจากจอ)",1800)};
 /* Auto: ไล่มุม 20–90 หาคู่ มุม/แรง ที่โดนแน่นอน
    "แน่นอน" = แรงที่บอกตกห่างเป้า ≤20 px และแรงต่ำกว่า 1% (ช่วงปล่อยหลอด) ยังตกในรัศมีระเบิด 55 px
    คืน 2 ตัวเลือก: แรงน้อยสุด (ทนมุมเพี้ยนสุด) + มุมสูงสุดที่โดน (ห่างกัน ≥8°) */

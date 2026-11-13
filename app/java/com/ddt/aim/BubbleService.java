@@ -877,6 +877,8 @@ public class BubbleService extends Service implements Bridge.Host {
                     org.json.JSONObject o = hit == null ? null : MapMatch.build(BubbleService.this, hit, snap, w, h);
                     if (o != null) lastMapId = hit.t.id;
                     js = "window.ddtMap&&ddtMap(" + (o == null ? "null" : o.toString()) + ")";
+                    WindRead.Result wr = WindRead.read(BubbleService.this, snap, w, h);
+                    if (wr != null) js += ";window.ddtWind&&ddtWind(" + wr.whole + "," + wr.tenth + "," + wr.dir + "," + wr.conf + ")";
                 } catch (Throwable t) {
                     CrashLog.note("matchMap", t);
                     js = "window.ddtMap&&ddtMap(null)";
