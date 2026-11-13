@@ -188,7 +188,28 @@ public class MapMatch {
             if (lastHit != null && lastHit.score >= 0.55f && (best == null || best.score - lastHit.score < 0.12f)) return finish(lastHit, rx0, ry0);
         }
         if (fw <= 3) return null;
-        // first time on this phone (or the stored spot no longer fits): search the region, scale from the frame width
+        // first time on this phone (or the stored spot no longer fits): search the region, scale from the frame width.
+        // The remembered frame width may come from another map (each map's minimap has its own scale), so try a few.
+        // keep the best over all tries; a different map must trail it clearly (a wrong spot stored here would spoil every later turn)
+        Hit all = null, other = null;
+        for (float mul : new float[]{1f, 0.9f, 1.1f, 0.81f, 1.22f, 0.73f, 1.35f}) {
+            Hit[] r = search(scr, sw, sh, rx0, ry0, fw * mul);
+            for (Hit h : r) {
+                if (h == null) continue;
+                if (all == null || h.score > all.score) {
+                    if (all != null && !all.t.id.equals(h.t.id) && (other == null || all.score > other.score)) other = all;
+                    all = h;
+                } else if (!h.t.id.equals(all.t.id) && (other == null || h.score > other.score)) other = h;
+            }
+        }
+        if (all == null || all.score < 0.9f || (other != null && all.score - other.score < 0.05f)) return null;
+        prefs.edit().putFloat(key + "R", rx0 + all.ox + all.t.pw * all.f).putFloat(key + "T", ry0 + all.oy).putFloat(key + "F", all.f).apply();
+        return finish(all, rx0, ry0);
+    }
+
+    /** Best and runner-up (different maps) for one scale guess, positions relative to the region. */
+    static Hit[] search(int[] scr, int sw, int sh, int rx0, int ry0, float fw) {
+        Hit best, second;
         float q = fw / 1000f;
         List<Hit> top = new ArrayList<>();
         for (Tpl t : maps) {
@@ -203,8 +224,8 @@ public class MapMatch {
             int W = rx0 + sw, H0 = ry0 + sh;
             int oxMin = Math.max(0, Math.round(W * (1 - 90f / 1136)) - tw - rx0), oxMax = Math.min(sw - tw, Math.round(W * (1 - 10f / 1136)) - tw - rx0);
             int oyMax = Math.min(sh - th, Math.round(H0 * 0.24f) - ry0);
-            for (int oy = 0; oy <= oyMax; oy += 2)
-                for (int ox = oxMin; ox <= oxMax; ox += 2) {
+            for (int oy = 0; oy <= oyMax; oy += 3)
+                for (int ox = oxMin; ox <= oxMax; ox += 3) {
                     float s = score(t, n, scr, sw, sh, ox, oy, f, null);
                     if (hb == null || s > hb.score) { hb = new Hit(); hb.t = t; hb.score = s; hb.ox = ox; hb.oy = oy; hb.f = f; }
                 }
@@ -214,16 +235,14 @@ public class MapMatch {
             public int compare(Hit a, Hit b) { return Float.compare(b.score, a.score); }
         });
         best = null; second = null;
-        for (int i = 0; i < Math.min(6, top.size()); i++) {
+        for (int i = 0; i < Math.min(10, top.size()); i++) {
             Hit c = top.get(i);
-            Hit h = refine(c.t, scr, sw, sh, c.ox, c.oy, 3, c.f, 0.05f);
+            Hit h = refine(c.t, scr, sw, sh, c.ox, c.oy, 4, c.f, 0.06f);
             if (DBG) System.out.println("  cand " + c.t.id + " coarse " + c.score + " -> " + h.score + " @" + (rx0 + h.ox) + "," + (ry0 + h.oy) + " f=" + h.f);
             if (best == null || h.score > best.score) { second = best; best = h; }
             else if (second == null || h.score > second.score) second = h;
         }
-        if (best == null || best.score < 0.88f || (second != null && best.score - second.score < 0.06f)) return null;
-        prefs.edit().putFloat(key + "R", rx0 + best.ox + best.t.pw * best.f).putFloat(key + "T", ry0 + best.oy).putFloat(key + "F", best.f).apply();
-        return finish(best, rx0, ry0);
+        return new Hit[]{best, second};
     }
 
     static Hit finish(Hit h, int rx0, int ry0) {

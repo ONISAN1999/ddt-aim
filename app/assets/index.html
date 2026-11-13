@@ -288,9 +288,18 @@ function wallHit(F,a,dir,w,tx,ty,goff){
       if(X<L||X>Rr)return [x,y];          /* ออกข้างแผนที่ = กระสุนหาย */
       if(solidAt(X,Y))return [x,y]}}
   return null}
-window.ddtMap=function(o){PK=lsGet("ddt_pk",PK);mapLoad(o);try{if(o)lsSet("ddt_map",o);else localStorage.removeItem("ddt_map")}catch(e){}
+window.ddtMap=function(o,cal){PK=lsGet("ddt_pk",PK);mapLoad(o);MAPST=o?"ok":cal===false?"cal":"unk";try{if(o)lsSet("ddt_map",o);else localStorage.removeItem("ddt_map")}catch(e){}
   HI.key="";render();
-  if(o)toast("ด่าน "+o.name+" · ตรวจสิ่งกีดขวางแล้ว",1800);else if(PK&&HUD)toast("ไม่รู้จักด่านนี้: ไม่ได้ตรวจสิ่งกีดขวาง",2200)};
+  if(o)toast("ด่าน "+o.name+" · ตรวจสิ่งกีดขวางแล้ว",1800);else if(PK&&HUD)toast(cal===false?"ครั้งแรก: แอปยังไม่รู้ตำแหน่งมินิแมพบนจอนี้ · แตะลูกบอล กด วัดกรอบใหม่ แล้วแตะขอบกรอบให้ตรง (ใช้ด่านที่เห็นพื้นชัด)":"ไม่รู้จักด่านนี้: ไม่ตรวจสิ่งกีดขวาง · ใช้กรอบที่จำไว้ ถ้าเปลี่ยนด่านให้กด วัดกรอบใหม่",4200)};
+var MAPST="";
+/* กรอบ 1 จอบนมินิแมพของด่านนี้ (แอปคำนวณจากขนาดด่านจริง × สเกลมินิแมพบนจอ): คิดระยะ/ความสูงใหม่จากจุดที่แตะ */
+window.ddtFrame=function(fwNew,fwOld){
+  PK=lsGet("ddt_pk",PK);if(!PK||!(fwNew>3))return;
+  var keep=PK.key===pkKey(),k=1000/fwNew,dx=(PK.tx-PK.sx)*k,dy=(PK.sy-PK.ty)*k;
+  PK.fw=fwNew;if(PK.sw)M.fwr=fwNew/PK.sw;lsSet("ddt_fwr",M.fwr);
+  if(keep){S.dist=(Math.abs(dx)/100).toFixed(1);S.dir=dx>=0?1:-1;S.h=String(Math.round(Math.abs(dy)));S.hSign=dy>=0?1:-1;PK.key=pkKey()}
+  lsSet("ddt_pk",PK);HI.key="";render();
+  if(fwOld>3&&Math.abs(fwNew/fwOld-1)>0.05)toast("ด่านนี้ 1 จอ = "+Math.round(fwNew)+" px (เดิม "+Math.round(fwOld)+") · ปรับระยะเป็น "+S.dist+" ช่องแล้ว",3200)};
 /* ลมจากป้ายบนจอ (แอปอ่านตอนแตะวัด): ค่า whole.tenth, ทิศ +1 ขวา / −1 ซ้าย, conf 0–1 */
 window.ddtWind=function(wi,wd,dir,conf){
   if(!(conf>=0.75)){toast("อ่านลมบนจอไม่ชัด ใช้ค่าลมเดิม เช็คอีกที",2200);return}
@@ -609,7 +618,7 @@ window.ddtPickDone=function(fw,sx,sy,tx,ty,sw){
   if(!(fw>3))return;M.fwr=fw/sw;lsSet("ddt_fwr",M.fwr);
   var k=1000/fw,dx=(tx-sx)*k,dy=(sy-ty)*k;
   S.dist=(Math.abs(dx)/100).toFixed(1);S.dir=dx>=0?1:-1;S.h=String(Math.round(Math.abs(dy)));S.hSign=dy>=0?1:-1;S.field="dist";S.aOff=0;
-  PK={fw:fw,sx:sx,sy:sy,key:pkKey()};lsSet("ddt_pk",PK);
+  PK={fw:fw,sx:sx,sy:sy,tx:tx,ty:ty,sw:sw,key:pkKey()};lsSet("ddt_pk",PK);
   setTab("calc");render();
   toast("ระยะ "+S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · ต่างระดับ "+(S.hSign>0?"+":"−")+S.h+" px",2600);
 };
@@ -652,7 +661,7 @@ function hudRender(){
       else if(LAST.auto.length)big.innerHTML=LAST.auto.map(function(x,i){return x.miss?'<em style="font-style:normal;color:#8E8E93">✕</em>':'<em style="font-style:normal;color:'+AUTO_COL[i]+'">'+x.a+"° "+x.r.p+'%'+(x.blk?'<b style="color:#FF453A;font-size:12px"> ชน</b>':'')+'</em>'}).join('<em style="font-style:normal;color:var(--l3)">'+(LAST.auto.length>2?" · ":" / ")+'</em>');
       else big.textContent="ไม่มีมุมที่โดน"}
     else{big.style.fontSize="";big.textContent=LAST.ang+"° · "+LAST.p+"%"+(LAST.blk?" ชน":"");big.style.color=LAST.blk?"#FF453A":LAST.hit?"var(--green)":"var(--orange)"}
-    sub.textContent=S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px · ลม "+(S.wDir>0?"→":"←")+S.wInt+"."+S.wDec+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(S.spread?" · 3 นัด":"")+(LAST.hit?"":LAST.hint?" · ลอง Auto "+LAST.hint.a+"° "+LAST.hint.r.p+"%":" · ไม่มีมุมที่โดน")+(LAST.auto&&LAST.auto.length&&!LAST.auto[0].sure?" · ไม่ชัวร์ เป้าแคบ":"")+(LAST.blk?" · ชนสิ่งกีดขวาง ลอง Auto":"")+(LAST.auto&&LAST.auto.length&&LAST.auto.every(function(x){return x.blk||x.miss})&&wallOn()?" · ทุกทางติดสิ่งกีดขวาง":"")+(wallOn()?" · ด่าน "+MAPD.name:"")+(S.mode==="auto"&&S.aOff?" · ปรับมุม "+(S.aOff>0?"+":"−")+Math.abs(S.aOff)+"°"+(LAST.auto&&LAST.auto.length&&LAST.auto.every(function(x){return x.miss})?" ไม่โดนทั้ง 3":""):"")}
+    sub.textContent=(wallOn()?"✓ "+MAPD.name+" · ":MAPST==="unk"||MAPST==="cal"?"? ไม่รู้จักด่าน · ":"")+S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px · ลม "+(S.wDir>0?"→":"←")+S.wInt+"."+S.wDec+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(S.spread?" · 3 นัด":"")+(LAST.hit?"":LAST.hint?" · ลอง Auto "+LAST.hint.a+"° "+LAST.hint.r.p+"%":" · ไม่มีมุมที่โดน")+(LAST.auto&&LAST.auto.length&&!LAST.auto[0].sure?" · ไม่ชัวร์ เป้าแคบ":"")+(LAST.blk?" · ชนสิ่งกีดขวาง ลอง Auto":"")+(LAST.auto&&LAST.auto.length&&LAST.auto.every(function(x){return x.blk||x.miss})&&wallOn()?" · ทุกทางติดสิ่งกีดขวาง":"")+(S.mode==="auto"&&S.aOff?" · ปรับมุม "+(S.aOff>0?"+":"−")+Math.abs(S.aOff)+"°"+(LAST.auto&&LAST.auto.length&&LAST.auto.every(function(x){return x.miss})?" ไม่โดนทั้ง 3":""):"")}
   /* แถวโหมดเรียงตามมุม: 30 · 50 · 65 · สูง 95 · กลับหัว — โชว์แรงของแต่ละมุมล็อกด้วย */
   var oth={};(LAST.has&&LAST.other||[]).forEach(function(o){oth[o.a]=o.r.p});if(LAST.has&&S.mode==="low")oth[LAST.ang]=LAST.p;
   var cur=S.mode==="auto"?"A":S.mode==="low"?"L"+S.lowA:S.mode==="high"?(S.back?"B":"H"):"";

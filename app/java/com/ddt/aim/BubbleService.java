@@ -876,7 +876,23 @@ public class BubbleService extends Service implements Bridge.Host {
                     MapMatch.Hit hit = MapMatch.find(prefs, "mm" + w + "x" + h, lastMapId, scr, sw, sh, rx0, 0, fw);
                     org.json.JSONObject o = hit == null ? null : MapMatch.build(BubbleService.this, hit, snap, w, h);
                     if (o != null) lastMapId = hit.t.id;
-                    js = "window.ddtMap&&ddtMap(" + (o == null ? "null" : o.toString()) + ")";
+                    js = "";
+                    if (o != null) {
+                        // the screen-wide view box on this map's minimap: 1000 battle px × minimap scale × screen px per unit
+                        double ms = Math.min(120.0 / hit.t.h, 240.0 / hit.t.w);
+                        final float fwMap = (float) (1000 * ms * 2 * hit.f);
+                        if (fwMap > 3 && Math.abs(fwMap / fw - 1) > 0.02f) {
+                            js = "window.ddtFrame&&ddtFrame(" + fwMap + "," + fw + ");";
+                            ui.post(new Runnable() {
+                                public void run() {
+                                    if (lastPick != null) lastPick[0] = fwMap;
+                                    prefs.edit().putFloat("fwr", fwMap / w).apply();
+                                }
+                            });
+                        }
+                    }
+                    boolean cal = prefs.getFloat("mm" + w + "x" + h + "F", -1) > 0;
+                    js += "window.ddtMap&&ddtMap(" + (o == null ? "null" : o.toString()) + "," + cal + ")";
                     WindRead.Result wr = WindRead.read(BubbleService.this, snap, w, h);
                     if (wr != null) js += ";window.ddtWind&&ddtWind(" + wr.whole + "," + wr.tenth + "," + wr.dir + "," + wr.conf + ")";
                 } catch (Throwable t) {

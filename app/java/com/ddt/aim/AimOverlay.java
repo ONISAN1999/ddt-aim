@@ -73,26 +73,30 @@ public class AimOverlay extends View {
             Path p = new Path();
             p.moveTo(s.path[0] - ox, s.path[1] - oy);
             for (int i = 2; i + 1 < s.path.length; i += 2) p.lineTo(s.path[i] - ox, s.path[i + 1] - oy);
-            line.setColor(0xCC000000);
-            line.setStrokeWidth(s.power < 0 ? 3f * d : 4.5f * d);
+            // thin dashed lines so the minimap stays readable; a blocked shot is drawn red
+            android.graphics.DashPathEffect dash = s.power < 0
+                    ? new android.graphics.DashPathEffect(new float[]{2 * d, 3 * d}, 0)
+                    : new android.graphics.DashPathEffect(new float[]{4 * d, 3 * d}, 0);
+            line.setPathEffect(dash);
+            line.setColor(0x99000000);
+            line.setStrokeWidth(s.power < 0 ? 1.8f * d : 2.4f * d);
             c.drawPath(p, line);
-            line.setColor(s.color);
-            line.setStrokeWidth(s.power < 0 ? 1.2f * d : 2f * d);   // side shots of a 3-shot spread: thin
-            if (s.wall != null) line.setPathEffect(new android.graphics.DashPathEffect(new float[]{5 * d, 4 * d}, 0));
+            line.setColor(s.wall != null ? 0xFFFF453A : s.color);
+            line.setStrokeWidth(s.power < 0 ? 0.8f * d : 1.2f * d);   // side shots of a 3-shot spread: thinner
             c.drawPath(p, line);
             line.setPathEffect(null);
-            if (s.wall != null) {            // blocked: red X where the shell meets the ground
-                float wx = s.wall[0] - ox, wy = s.wall[1] - oy, r = 4.5f * d;
-                line.setColor(0xE6000000); line.setStrokeWidth(4.5f * d);
+            if (s.wall != null) {            // blocked: small red X where the shell meets the ground
+                float wx = s.wall[0] - ox, wy = s.wall[1] - oy, r = 2.5f * d;
+                line.setColor(0xCC000000); line.setStrokeWidth(2.6f * d);
                 c.drawLine(wx - r, wy - r, wx + r, wy + r, line); c.drawLine(wx - r, wy + r, wx + r, wy - r, line);
-                line.setColor(0xFFFF453A); line.setStrokeWidth(2.5f * d);
+                line.setColor(0xFFFF453A); line.setStrokeWidth(1.4f * d);
                 c.drawLine(wx - r, wy - r, wx + r, wy + r, line); c.drawLine(wx - r, wy + r, wx + r, wy - r, line);
             }
         }
         if (anyPath && tx >= 0) {
             line.setColor(0xFFFFFFFF);
-            line.setStrokeWidth(1.5f * d);
-            c.drawCircle(tx - ox, ty - oy, 7 * d, line);
+            line.setStrokeWidth(1f * d);
+            c.drawCircle(tx - ox, ty - oy, 5 * d, line);
         }
 
         // ticks on the power bar; labels stacked when ticks sit close together
