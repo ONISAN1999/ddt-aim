@@ -1016,7 +1016,7 @@ public class BubbleService extends Service implements Bridge.Host {
                         x1 = Math.min(w, hit.ox + Math.round(hit.t.pw * hit.f) + 6); y1 = Math.min(h, hit.oy + Math.round(hit.t.ph * hit.f) + 6);
                         fwUse = (float) (1000 * Math.min(120.0 / hit.t.h, 240.0 / hit.t.w) * 2 * hit.f);
                     } else {
-                        x0 = (int) (w * 0.72f); y0 = (int) (h * 0.03f); x1 = w; y1 = (int) (h * 0.32f);
+                        x0 = (int) (w * 0.72f); y0 = (int) (h * 0.048f); x1 = w; y1 = (int) (h * 0.30f);   // below the minimap title bar (its red power button)
                     }
                     res = AutoPick.detect(snap, x0, y0, x1, y1, w / 2576f);
                 } catch (Throwable t) {

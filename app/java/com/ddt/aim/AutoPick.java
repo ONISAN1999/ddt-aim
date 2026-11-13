@@ -50,7 +50,7 @@ public class AutoPick {
             int bw = bx1 - bx0 + 1, bh = by1 - by0 + 1;
             if (qt < 20 * sc * sc || qt > 900 * sc * sc) continue;
             float ar = bw / (float) bh;
-            if (ar < 0.6f || ar > 1.67f || qt < 0.55f * bw * bh) continue;
+            if (ar < 0.6f || ar > 1.67f || qt < 0.4f * bw * bh) continue;      // our disc can read half-filled (halo, antialiasing)
             Disc d = new Disc();
             d.col = c; d.n = qt; d.cx = sx / qt; d.cy = sy / qt; d.r = (bw + bh) / 4f;
             discs.add(d);
