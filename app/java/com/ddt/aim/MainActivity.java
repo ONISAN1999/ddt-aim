@@ -182,6 +182,9 @@ public class MainActivity extends Activity implements Bridge.Host {
     @Override
     public void hudHeight(int dp) { }
 
+    @Override
+    public void miniText(String s) { }
+
     private boolean installing = false;
     private long installAt = 0;
 

@@ -75,7 +75,13 @@ public class BubbleService extends Service implements Bridge.Host {
     private boolean hudMin = false;            // control bar folded away, shot lines stay on screen
     private android.widget.TextView mini;      // small bubble: fold / unfold the control bar
     private WindowManager.LayoutParams miniLp;
-    private static final int MINI_DP = 34;
+    private static final int MINI_DP = 34, MINI_WIDE_DP = 84;
+    private String miniWind = "";
+
+    private void setMiniText(String s) {
+        miniWind = s == null ? "" : s;
+        if (mini != null && mini.getVisibility() == View.VISIBLE) updateMini(true);
+    }
 
     private Panel panel;
     private WebView panelWeb;
@@ -509,6 +515,7 @@ public class BubbleService extends Service implements Bridge.Host {
             public void showAim(String json) { onAim(json); }
             public void resetBar() { doResetBar(); }
             public void hudHeight(int h) { setHudHeight(h); }
+            public void miniText(String s) { setMiniText(s); }
         }), "DDT");
         hudWeb.setWebViewClient(new WebViewClient() {
             @Override
@@ -577,12 +584,12 @@ public class BubbleService extends Service implements Bridge.Host {
     private void placeMini() {
         if (mini == null || ballLp == null) return;
         DisplayMetrics m = real();
-        int bs = dp(BALL_DP), ms = dp(MINI_DP);
+        int bs = dp(BALL_DP), ms = dp(MINI_DP), mw = miniLp.width;
         boolean right = ballLp.x + bs / 2 > m.widthPixels / 2;
-        miniLp.x = right ? ballLp.x + bs - ms * 2 / 3 : ballLp.x - ms / 3;
+        miniLp.x = right ? ballLp.x + bs - mw + ms / 3 : ballLp.x - ms / 3;
         miniLp.y = ballLp.y - ms / 3;
         if (miniLp.y < 0) miniLp.y = ballLp.y + bs - ms * 2 / 3;
-        miniLp.x = Math.max(0, Math.min(m.widthPixels - ms, miniLp.x));
+        miniLp.x = Math.max(0, Math.min(m.widthPixels - mw, miniLp.x));
         try { wm.updateViewLayout(mini, miniLp); } catch (Exception ignored) { }
     }
 
@@ -590,13 +597,19 @@ public class BubbleService extends Service implements Bridge.Host {
         if (mini == null) return;
         boolean show = on && ball != null && ball.getVisibility() == View.VISIBLE;
         if (!show) { mini.setVisibility(View.GONE); return; }
+        // folded: a blue pill "+  ลม → 2.8" so the wind in use stays visible; open: a small round "−"
+        boolean wide = hudMin && miniWind.length() > 0;
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        bg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        bg.setCornerRadius(dp(MINI_DP) / 2f);
         bg.setColor(hudMin ? 0xFF0A84FF : 0xEE2C2C2E);
         bg.setStroke(dp(1.5f), 0xCCFFFFFF);
         mini.setBackground(bg);
-        mini.setText(hudMin ? "+" : "−");
-        mini.setContentDescription(hudMin ? "ขยายแผงควบคุม" : "ย่อแผงควบคุม (เส้นแรงยังแสดงอยู่)");
+        mini.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, wide ? 15 : 20);
+        mini.setText(hudMin ? (wide ? "+  ลม " + miniWind : "+") : "−");
+        mini.setContentDescription(hudMin ? "ขยายแผงควบคุม · ลม " + miniWind : "ย่อแผงควบคุม (เส้นแรงยังแสดงอยู่)");
+        int want = dp(wide ? MINI_WIDE_DP + 26 : MINI_DP);
+        if (miniLp.width != want) miniLp.width = want;
         placeMini();
         mini.setVisibility(View.VISIBLE);
     }
@@ -728,6 +741,9 @@ public class BubbleService extends Service implements Bridge.Host {
 
     @Override
     public void hudHeight(int h) { setHudHeight(h); }
+
+    @Override
+    public void miniText(String s) { setMiniText(s); }
 
     /** The overlay cannot rotate the screen: hand the install to the main screen, which turns portrait. */
     private void installViaMain() {

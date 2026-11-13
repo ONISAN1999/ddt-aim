@@ -669,6 +669,7 @@ function hudRender(){
   var cur=S.mode==="auto"?"A":S.mode==="low"?"L"+S.lowA:S.mode==="high"?(S.back?"B":"H"):"";
   $("hM").innerHTML='<button class="hm'+(cur==="A"?" on":"")+'" data-hm="A">Auto</button>'+[30,50,65].map(function(a){var on=cur==="L"+a;return '<button class="hm'+(on?" on":"")+'" data-hm="L'+a+'">'+a+'°'+(oth[a]!=null?'<small>'+oth[a]+'%</small>':'')+'</button>'}).join("")+
     '<button class="hm'+(cur==="H"?" on":"")+'" data-hm="H">สูง '+(S.hiBase||95)+'</button><button class="hm'+(cur==="B"?" on":"")+'" data-hm="B">กลับหัว</button>';
+  if(HOST&&HOST.miniText){var wt=(S.wInt||S.wDec)?(S.wDir>0?"→ ":"← ")+S.wInt+(S.wDec?"."+S.wDec:""):"0";if(wt!==hudRender.mt){hudRender.mt=wt;try{HOST.miniText(wt)}catch(e){}}}
   document.body.classList.toggle("auto",S.mode==="auto");
   $("hA").innerHTML=aoBtns("hk");
   var hh=S.mode==="auto"?208:170;if(HOST&&HOST.hudHeight&&HUD_H!==hh){HUD_H=hh;try{HOST.hudHeight(hh)}catch(e){}}

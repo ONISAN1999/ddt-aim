@@ -19,6 +19,8 @@ public class Bridge {
         void resetBar();
         /** Floating result bar height in dp (Auto adds the angle-nudge row). */
         void hudHeight(int dp);
+        /** Short wind text for the small bubble while the bar is folded, e.g. "→ 2.8". */
+        void miniText(String s);
     }
 
     private final Context ctx;
@@ -102,6 +104,11 @@ public class Bridge {
     @JavascriptInterface
     public void hudHeight(final int dp) {
         if (host != null) onUi(new Runnable() { public void run() { host.hudHeight(dp); } });
+    }
+
+    @JavascriptInterface
+    public void miniText(final String s) {
+        if (host != null) onUi(new Runnable() { public void run() { host.miniText(s); } });
     }
 
     @JavascriptInterface
