@@ -288,9 +288,11 @@ function wallHit(F,a,dir,w,tx,ty,goff){
       if(X<L||X>Rr)return [x,y];          /* ออกข้างแผนที่ = กระสุนหาย */
       if(solidAt(X,Y))return [x,y]}}
   return null}
-window.ddtMap=function(o,cal){PK=lsGet("ddt_pk",PK);mapLoad(o);MAPST=o?"ok":cal===false?"cal":"unk";try{if(o)lsSet("ddt_map",o);else localStorage.removeItem("ddt_map")}catch(e){}
+window.ddtMap=function(o,cal,why){PK=lsGet("ddt_pk",PK);mapLoad(o);MAPST=o?"ok":cal===false?"cal":"unk";try{if(o)lsSet("ddt_map",o);else localStorage.removeItem("ddt_map")}catch(e){}
   HI.key="";render();
-  if(o)toast("ด่าน "+o.name+" · ตรวจสิ่งกีดขวางแล้ว",1800);else if(PK&&HUD)toast(cal===false?"ครั้งแรก: แอปยังไม่รู้ตำแหน่งมินิแมพบนจอนี้ · แตะลูกบอล กด วัดกรอบใหม่ แล้วแตะขอบกรอบให้ตรง (ใช้ด่านที่เห็นพื้นชัด)":"ไม่รู้จักด่านนี้: ไม่ตรวจสิ่งกีดขวาง · ใช้กรอบที่จำไว้ ถ้าเปลี่ยนด่านให้กด วัดกรอบใหม่",4200)};
+  if(o)toast("ด่าน "+o.name+" · ตรวจสิ่งกีดขวางแล้ว",1800);else if(PK&&HUD&&why)toast("? ไม่รู้จักด่าน — "+why,6500);else if(PK&&HUD)toast(cal===false?"ครั้งแรก: แอปยังไม่รู้ตำแหน่งมินิแมพบนจอนี้ · แตะลูกบอล กด วัดกรอบใหม่ แล้วแตะขอบกรอบให้ตรง (ใช้ด่านที่เห็นพื้นชัด)":"ไม่รู้จักด่านนี้: ไม่ตรวจสิ่งกีดขวาง · ใช้กรอบที่จำไว้ ถ้าเปลี่ยนด่านให้กด วัดกรอบใหม่",4200);
+  if(!o&&why){MAPWHY=why;lsSet("ddt_mapwhy",why)}};
+var MAPWHY=lsGet("ddt_mapwhy","");
 var MAPST="";
 /* กรอบ 1 จอบนมินิแมพของด่านนี้ (แอปคำนวณจากขนาดด่านจริง × สเกลมินิแมพบนจอ): คิดระยะ/ความสูงใหม่จากจุดที่แตะ */
 window.ddtFrame=function(fwNew,fwOld){

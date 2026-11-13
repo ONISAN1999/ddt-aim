@@ -873,6 +873,7 @@ public class BubbleService extends Service implements Bridge.Host {
                     int rx0 = (int) (w * 0.55f), sw = w - rx0, sh = (int) (h * 0.5f);
                     int[] scr = new int[sw * sh];
                     snap.getPixels(scr, 0, sw, rx0, 0, sw, sh);
+                    MapMatch.diag = "";
                     MapMatch.Hit hit = MapMatch.find(prefs, "mm" + w + "x" + h, lastMapId, scr, sw, sh, rx0, 0, fw);
                     org.json.JSONObject o = hit == null ? null : MapMatch.build(BubbleService.this, hit, snap, w, h);
                     if (o != null) lastMapId = hit.t.id;
@@ -892,7 +893,7 @@ public class BubbleService extends Service implements Bridge.Host {
                         }
                     }
                     boolean cal = prefs.getFloat("mm" + w + "x" + h + "F", -1) > 0;
-                    js += "window.ddtMap&&ddtMap(" + (o == null ? "null" : o.toString()) + "," + cal + ")";
+                    js += "window.ddtMap&&ddtMap(" + (o == null ? "null" : o.toString()) + "," + cal + "," + org.json.JSONObject.quote(o == null ? MapMatch.diag : "") + ")";
                     WindRead.Result wr = WindRead.read(BubbleService.this, snap, w, h);
                     if (wr != null) js += ";window.ddtWind&&ddtWind(" + wr.whole + "," + wr.tenth + "," + wr.dir + "," + wr.conf + ")";
                 } catch (Throwable t) {

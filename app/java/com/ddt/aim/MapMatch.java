@@ -32,6 +32,7 @@ public class MapMatch {
 
     static List<Tpl> maps;
     static final int NS = 300;
+    static String diag = "";      // why the last search failed (shown to the person)
     static final boolean DBG = System.getProperty("ddt.dbg") != null;
 
     static synchronized boolean load(Context c) {
@@ -148,9 +149,13 @@ public class MapMatch {
 
     /** Best placement of one map near (ox, oy) within ±r px, scale f × (1 ± fs). */
     static Hit refine(Tpl t, int[] scr, int sw, int sh, int ox0, int oy0, int r, float f0, float fs) {
+        return refine(t, scr, sw, sh, ox0, oy0, r, f0, fs, 0.01f);
+    }
+
+    static Hit refine(Tpl t, int[] scr, int sw, int sh, int ox0, int oy0, int r, float f0, float fs, float step) {
         Hit best = null;
         float[] fit = new float[2];
-        for (float g = -fs; g <= fs + 1e-4f; g += 0.01f) {
+        for (float g = -fs; g <= fs + 1e-4f; g += step) {
             float f = f0 * (1 + g);
             int rx = ox0 + Math.round(t.pw * f0) - Math.round(t.pw * f);    // keep the right edge
             for (int dy = -r; dy <= r; dy++)
@@ -183,16 +188,17 @@ public class MapMatch {
                 if (best == null || h.score > best.score) { second = best; best = h; }
                 else if (second == null || h.score > second.score) second = h;
             }
+            diag = "จำตำแหน่งแล้ว · ใกล้สุด " + (best == null ? "-" : best.t.name + " " + fmt(best.score)) + (second == null ? "" : " / " + second.t.name + " " + fmt(second.score));
             if (best != null && best.score >= 0.80f && (second == null || best.score - second.score >= 0.06f)) return finish(best, rx0, ry0);
             // a busy turn (smoke, half the minimap covered, ground blown away): keep last turn's map if it still fits
             if (lastHit != null && lastHit.score >= 0.55f && (best == null || best.score - lastHit.score < 0.12f)) return finish(lastHit, rx0, ry0);
         }
-        if (fw <= 3) return null;
+        if (fw <= 3) { diag += " · ไม่มีค่ากรอบ"; return null; }
         // first time on this phone (or the stored spot no longer fits): search the region, scale from the frame width.
         // The remembered frame width may come from another map (each map's minimap has its own scale), so try a few.
         // keep the best over all tries; a different map must trail it clearly (a wrong spot stored here would spoil every later turn)
         Hit all = null, other = null;
-        for (float mul : new float[]{1f, 0.9f, 1.1f, 0.81f, 1.22f, 0.73f, 1.35f}) {
+        for (float mul : new float[]{1f, 0.92f, 1.08f, 0.85f, 1.17f, 0.78f, 1.27f, 0.72f, 1.38f}) {
             Hit[] r = search(scr, sw, sh, rx0, ry0, fw * mul);
             for (Hit h : r) {
                 if (h == null) continue;
@@ -202,7 +208,14 @@ public class MapMatch {
                 } else if (!h.t.id.equals(all.t.id) && (other == null || h.score > other.score)) other = h;
             }
         }
-        if (all == null || all.score < 0.9f || (other != null && all.score - other.score < 0.05f)) return null;
+        if (all != null) {             // fine pass: scale in 0.25 % steps so the stored spot is exact
+            Hit fine = refine(all.t, scr, sw, sh, all.ox, all.oy, 2, all.f, 0.015f, 0.0025f);
+            if (fine != null && fine.score >= all.score) all = fine;
+        }
+        if (all == null || all.score < 0.9f || (other != null && all.score - other.score < 0.05f)) {
+            diag = (F > 0 ? diag + " · " : "") + "หาตำแหน่งมินิแมพ: ใกล้สุด " + (all == null ? "-" : all.t.name + " " + fmt(all.score)) + (other == null ? "" : " / " + other.t.name + " " + fmt(other.score)) + " · กรอบ " + Math.round(fw) + " px";
+            return null;
+        }
         prefs.edit().putFloat(key + "R", rx0 + all.ox + all.t.pw * all.f).putFloat(key + "T", ry0 + all.oy).putFloat(key + "F", all.f).apply();
         return finish(all, rx0, ry0);
     }
@@ -237,13 +250,15 @@ public class MapMatch {
         best = null; second = null;
         for (int i = 0; i < Math.min(10, top.size()); i++) {
             Hit c = top.get(i);
-            Hit h = refine(c.t, scr, sw, sh, c.ox, c.oy, 4, c.f, 0.06f);
+            Hit h = refine(c.t, scr, sw, sh, c.ox, c.oy, 4, c.f, 0.07f);
             if (DBG) System.out.println("  cand " + c.t.id + " coarse " + c.score + " -> " + h.score + " @" + (rx0 + h.ox) + "," + (ry0 + h.oy) + " f=" + h.f);
             if (best == null || h.score > best.score) { second = best; best = h; }
             else if (second == null || h.score > second.score) second = h;
         }
         return new Hit[]{best, second};
     }
+
+    static String fmt(float v) { return String.valueOf(Math.round(v * 100) / 100f); }
 
     static Hit finish(Hit h, int rx0, int ry0) {
         h.ox += rx0; h.oy += ry0;
