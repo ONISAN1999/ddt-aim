@@ -134,6 +134,7 @@ body.hud #hud{display:flex}
       <div class="card res">
         <div class="row"><div class="mseg"><button id="mAuto" aria-label="Auto: หามุมและแรงที่โดนให้เอง">Auto</button><button id="mPick">เลือก</button><button id="mLow" aria-label="มุมล็อก แตะซ้ำเพื่อสลับ 30 50 65 องศา">ล็อก</button><button id="mHigh" aria-label="มุมสูง แตะซ้ำเพื่อเปลี่ยนแรงหลัก">สูง</button><button id="mBack" aria-label="กลับหัว: หันหนีเป้า มุมเกิน 90 องศา">กลับหัว</button></div><span id="rStat" style="display:none"></span></div>
         <div class="row" id="aoRow" style="display:none"><div class="mseg" id="aoSeg"></div></div>
+        <div class="row" id="otRow" style="display:none"><div class="mseg"><button id="otBtn" aria-pressed="false">วัดแตะเดียว: ปิด</button></div><span style="font-size:11px;color:var(--l2);margin-left:6px">แตะลูกบอลครั้งเดียว แอปหาตัวเรา+เป้าใกล้สุดเอง</span></div>
         <div style="display:flex;align-items:baseline;gap:10px"><span class="pw" id="rPow">—</span><span class="sub" id="rSub">ใส่ระยะก่อน</span></div>
         <svg width="222" height="54" viewBox="0 0 222 62" preserveAspectRatio="none" aria-hidden="true" style="margin-top:2px"><line x1="0" y1="61" x2="222" y2="61" stroke="#3A3A3C"/><path id="rPath" d="" fill="none" stroke="#0A84FF" stroke-width="2" stroke-dasharray="4 3"/><circle id="rS" r="4" fill="#5AC8FA" cx="-9" cy="-9"/><circle id="rT" r="5" fill="none" stroke="#FF9F0A" stroke-width="2" cx="-9" cy="-9"/></svg>
       </div>
@@ -225,6 +226,7 @@ body.hud #hud{display:flex}
 <div id="hud">
   <div class="hr1">
     <button class="hres" id="hRes" aria-label="เปิดแผงเต็ม"><b id="hBig">—</b><span id="hSub">แตะลูกบอล แล้วแตะ ตัวเรา → เป้า</span></button>
+    <button class="hb" id="hTg" aria-label="เปลี่ยนเป้า" style="display:none">เป้า</button>
     <button class="hb" id="hSp" aria-label="ยิงกระจาย 3 นัด" aria-pressed="false">3 นัด</button>
     <button class="hb" id="hX" aria-label="ซ่อนแถบผล">✕</button>
   </div>
@@ -294,6 +296,14 @@ window.ddtMap=function(o,cal,why){PK=lsGet("ddt_pk",PK);mapLoad(o);MAPST=o?"ok":
   if(!o&&why){MAPWHY=why;lsSet("ddt_mapwhy",why)}};
 var MAPWHY=lsGet("ddt_mapwhy","");
 var MAPST="";
+/* วัดแตะเดียว: แอปหาเป้าทุกตัว (ใกล้สุดก่อน) · ปุ่ม "เป้า 1/3" สลับเป้า แล้วคิดระยะใหม่จากจุดบนจอ */
+window.ddtTargets=function(list){PK=lsGet("ddt_pk",PK);if(!PK||!list||!list.length)return;PK.tg=list;PK.ti=0;lsSet("ddt_pk",PK);HI.key="";render()};
+function setTarget(i){if(!PK||!PK.tg||!PK.tg.length)return;var keep=PK.key===pkKey();if(!keep)return;
+  PK.ti=(i+PK.tg.length)%PK.tg.length;PK.tx=PK.tg[PK.ti][0];PK.ty=PK.tg[PK.ti][1];
+  var k=1000/PK.fw,dx=(PK.tx-PK.sx)*k,dy=(PK.sy-PK.ty)*k;
+  S.dist=(Math.abs(dx)/100).toFixed(1);S.dir=dx>=0?1:-1;S.h=String(Math.round(Math.abs(dy)));S.hSign=dy>=0?1:-1;S.aOff=0;PK.key=pkKey();lsSet("ddt_pk",PK);
+  try{if(HOST&&HOST.setTarget)HOST.setTarget(PK.tx,PK.ty)}catch(e){}
+  HI.key="";HI.sel=null;render();toast("เป้า "+(PK.ti+1)+"/"+PK.tg.length+" · "+S.dist+" ช่อง",1400)}
 /* กรอบ 1 จอบนมินิแมพของด่านนี้ (แอปคำนวณจากขนาดด่านจริง × สเกลมินิแมพบนจอ): คิดระยะ/ความสูงใหม่จากจุดที่แตะ */
 window.ddtFrame=function(fwNew,fwOld){
   PK=lsGet("ddt_pk",PK);if(!PK||!(fwNew>3))return;
@@ -605,6 +615,8 @@ $("uGo").onclick=function(){if(!HOST)return;U.phase="dl";upView();HOST.downloadU
 $("uInst").onclick=function(){if(HOST)HOST.installUpdate()};
 $("uWeb").onclick=function(){var u=U.info&&U.info.apk||"https://github.com/ONISAN1999/ddt-aim/releases/latest/download/ddt-aim.apk";
   if(HOST&&HOST.openUrl){HOST.openUrl(u);toast("เปิดเบราว์เซอร์แล้ว: รอดาวน์โหลดเสร็จ แตะไฟล์แล้วกดติดตั้ง",5000)}else location.href=u};
+if(BUBBLE&&HOST&&HOST.setOneTap){$("otRow").style.display="";var otSet=function(v){$("otBtn").textContent="วัดแตะเดียว: "+(v?"เปิด":"ปิด");$("otBtn").classList.toggle("on",v);$("otBtn").setAttribute("aria-pressed",String(v))};
+  otSet(!!HOST.oneTap());$("otBtn").onclick=function(){var v=!HOST.oneTap();HOST.setOneTap(v);otSet(v);toast(v?"วัดแตะเดียว เปิด: แตะลูกบอลครั้งเดียวพอ":"วัดแตะเดียว ปิด: แตะตัวเรา → เป้า เอง",1800)}}
 if(BUBBLE){document.body.classList.add("bubble");$("bClose").style.display="flex";if(HOST)$("bClose").style.visibility="hidden";$("bClose").onclick=function(){if(HOST&&HOST.close)HOST.close()};$("bShot2").textContent="จับภาพจอสด"}
 else{$("mEmptyT").textContent="เลือกรูปแคปหน้าจอเกม หรือเปิด Bubble แล้วกดแคปจอระหว่างเล่น";$("bShot2").textContent="เลือกรูป";$("bShot").textContent="เลือกรูป";
   if(HOST&&HOST.toggleBubble){$("bBubble").style.display="flex";$("bBubble").onclick=function(){HOST.toggleBubble()}}}
@@ -670,6 +682,7 @@ function hudRender(){
   $("hM").innerHTML='<button class="hm'+(cur==="A"?" on":"")+'" data-hm="A">Auto</button>'+[30,50,65].map(function(a){var on=cur==="L"+a;return '<button class="hm'+(on?" on":"")+'" data-hm="L'+a+'">'+a+'°'+(oth[a]!=null?'<small>'+oth[a]+'%</small>':'')+'</button>'}).join("")+
     '<button class="hm'+(cur==="H"?" on":"")+'" data-hm="H">สูง '+(S.hiBase||95)+'</button><button class="hm'+(cur==="B"?" on":"")+'" data-hm="B">กลับหัว</button>';
   if(HOST&&HOST.miniText){var wt=(S.wInt||S.wDec)?(S.wDir>0?"→ ":"← ")+S.wInt+(S.wDec?"."+S.wDec:""):"0";if(wt!==hudRender.mt){hudRender.mt=wt;try{HOST.miniText(wt)}catch(e){}}}
+  var tgOn=PK&&PK.tg&&PK.tg.length>1&&PK.key===pkKey();$("hTg").style.display=tgOn?"":"none";if(tgOn)$("hTg").textContent="เป้า "+(PK.ti+1)+"/"+PK.tg.length;
   document.body.classList.toggle("auto",S.mode==="auto");
   $("hA").innerHTML=aoBtns("hk");
   var hh=S.mode==="auto"?208:170;if(HOST&&HOST.hudHeight&&HUD_H!==hh){HUD_H=hh;try{HOST.hudHeight(hh)}catch(e){}}
@@ -685,6 +698,7 @@ if(HUD){document.documentElement.classList.add("hud");document.body.classList.ad
   $("hRes").onclick=function(){if(HOST&&HOST.openPanel)HOST.openPanel()};
   $("hX").onclick=function(){if(HOST&&HOST.close)HOST.close()};
   $("hSp").onclick=function(){S.spread=!S.spread;HI.key="";HI.sel=null;render()};
+  $("hTg").onclick=function(){if(PK&&PK.tg)setTarget((PK.ti||0)+1)};
   document.addEventListener("click",function(e){var b=e.target.closest("[data-hm]");if(!b)return;var m=b.dataset.hm;
     if(m==="H"){if(S.mode==="high"&&!S.back)S.hiBase=S.hiBase===95?100:S.hiBase===100?90:95;S.mode="high";S.back=false}
     else if(m==="B"){S.mode="high";S.back=true}

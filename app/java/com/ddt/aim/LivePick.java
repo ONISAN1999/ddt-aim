@@ -89,7 +89,7 @@ public class LivePick extends View {
 
     // ---------- auto snap ----------
     /** 1 = enemy marker red, 2 = own/ally marker blue, 0 = anything else (the minimap is see-through). */
-    private static int markerClass(int p) {
+    static int markerClass(int p) {
         int R = (p >> 16) & 255, G = (p >> 8) & 255, B = p & 255;
         // markers are flat, fully saturated discs; map art (candy canes, ornaments) is shaded and duller
         if (R >= 190 && G <= 70 && B <= 70 && R - Math.max(G, B) >= 150) return 1;
@@ -220,6 +220,11 @@ public class LivePick extends View {
     }
 
     public Object lock() { return lock; }
+
+    /** One-tap measuring found everything by itself: finish without taps (bar ticks keep the old setting). */
+    public void autoDone(float fw, float sx, float sy, float tx, float ty) {
+        cb.done(fw, sx, sy, tx, ty, screenW, null);
+    }
 
     /** Copy of the last clean frame (screen size), for the map matcher after the pick closes. */
     public Bitmap copyFrame(int w, int h) {

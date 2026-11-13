@@ -21,6 +21,8 @@ public class Bridge {
         void hudHeight(int dp);
         /** Short wind text for the small bubble while the bar is folded, e.g. "→ 2.8". */
         void miniText(String s);
+        /** One-tap measuring: the person switched to another enemy (screen px). */
+        void setTarget(float x, float y);
     }
 
     private final Context ctx;
@@ -104,6 +106,21 @@ public class Bridge {
     @JavascriptInterface
     public void hudHeight(final int dp) {
         if (host != null) onUi(new Runnable() { public void run() { host.hudHeight(dp); } });
+    }
+
+    @JavascriptInterface
+    public void setOneTap(boolean on) {
+        try { ctx.getSharedPreferences("ddt", 0).edit().putBoolean("onetap", on).apply(); } catch (Exception ignored) { }
+    }
+
+    @JavascriptInterface
+    public boolean oneTap() {
+        try { return ctx.getSharedPreferences("ddt", 0).getBoolean("onetap", false); } catch (Exception e) { return false; }
+    }
+
+    @JavascriptInterface
+    public void setTarget(final float x, final float y) {
+        if (host != null) onUi(new Runnable() { public void run() { host.setTarget(x, y); } });
     }
 
     @JavascriptInterface

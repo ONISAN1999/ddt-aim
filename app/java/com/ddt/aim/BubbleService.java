@@ -41,6 +41,7 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.Toast;
+import java.util.List;
 
 import java.nio.ByteBuffer;
 
@@ -516,6 +517,7 @@ public class BubbleService extends Service implements Bridge.Host {
             public void resetBar() { doResetBar(); }
             public void hudHeight(int h) { setHudHeight(h); }
             public void miniText(String s) { setMiniText(s); }
+            public void setTarget(float x, float y) { if (lastPick != null) { lastPick[3] = x; lastPick[4] = y; } }
         }), "DDT");
         hudWeb.setWebViewClient(new WebViewClient() {
             @Override
@@ -745,6 +747,9 @@ public class BubbleService extends Service implements Bridge.Host {
     @Override
     public void miniText(String s) { setMiniText(s); }
 
+    @Override
+    public void setTarget(float x, float y) { if (lastPick != null) { lastPick[3] = x; lastPick[4] = y; } }
+
     /** The overlay cannot rotate the screen: hand the install to the main screen, which turns portrait. */
     private void installViaMain() {
         collapse();
@@ -799,6 +804,8 @@ public class BubbleService extends Service implements Bridge.Host {
             return;
         }
         pickToHud = toHud;
+        autoTry = toHud && prefs.getBoolean("onetap", false);
+        autoTargets = null;
         pick = new LivePick(this, fwr, w, aim == null || !aim.hasBar(), new LivePick.Cb() {
             public void done(float fw, float sx, float sy, float tx, float ty, int sw, float[] bar) {
                 if (sw > 0 && fw > 3) prefs.edit().putFloat("fwr", fw / sw).apply();
@@ -862,7 +869,14 @@ public class BubbleService extends Service implements Bridge.Host {
             }
             synchronized (p.lock()) { b.copyPixelsFromBuffer(buf); }
             bufIdx ^= 1;
-            p.setFrame(b, now, isBlack(b, w, h));
+            boolean blk = isBlack(b, w, h);
+            p.setFrame(b, now, blk);
+            if (autoTry && !blk) {
+                autoTry = false;
+                Bitmap copy;
+                synchronized (p.lock()) { copy = Bitmap.createBitmap(b, 0, 0, Math.min(w, b.getWidth()), h); }
+                runAuto(copy, w, h);
+            }
         } catch (Throwable t) {
             CrashLog.note("frame", t);
         } finally {
@@ -878,6 +892,51 @@ public class BubbleService extends Service implements Bridge.Host {
     }
 
     private String lastMapId;
+    private volatile boolean autoTry;
+    private volatile List<float[]> autoTargets;
+
+    /** One-tap measuring: map + frame width from the minimap, our marker and the nearest enemy, no taps. */
+    private void runAuto(final Bitmap snap, final int w, final int h) {
+        new Thread(new Runnable() {
+            public void run() {
+                AutoPick.Res res = null;
+                float fwUse = prefs.getFloat("fwr", 0) * w;
+                try {
+                    MapMatch.load(BubbleService.this);
+                    int rx0 = (int) (w * 0.55f), sw = w - rx0, sh = (int) (h * 0.5f);
+                    int[] scr = new int[sw * sh];
+                    snap.getPixels(scr, 0, sw, rx0, 0, sw, sh);
+                    MapMatch.Hit hit = MapMatch.find(prefs, "mm" + w + "x" + h, lastMapId, scr, sw, sh, rx0, 0, fwUse);
+                    int x0, y0, x1, y1;
+                    if (hit != null) {
+                        x0 = Math.max(0, hit.ox - 6); y0 = Math.max(0, hit.oy - 6);
+                        x1 = Math.min(w, hit.ox + Math.round(hit.t.pw * hit.f) + 6); y1 = Math.min(h, hit.oy + Math.round(hit.t.ph * hit.f) + 6);
+                        fwUse = (float) (1000 * Math.min(120.0 / hit.t.h, 240.0 / hit.t.w) * 2 * hit.f);
+                    } else {
+                        x0 = (int) (w * 0.72f); y0 = (int) (h * 0.03f); x1 = w; y1 = (int) (h * 0.32f);
+                    }
+                    res = AutoPick.detect(snap, x0, y0, x1, y1, w / 2576f);
+                } catch (Throwable t) {
+                    CrashLog.note("auto", t);
+                }
+                snap.recycle();
+                final AutoPick.Res r = res;
+                final float fwF = fwUse;
+                ui.post(new Runnable() {
+                    public void run() {
+                        if (pick == null) return;
+                        if (r == null || fwF <= 3) {
+                            Toast.makeText(BubbleService.this, fwF <= 3 ? "วัดแตะเดียว: ยังไม่มีค่ากรอบ แตะเองครั้งนี้" : "วัดแตะเดียว: หาตัวเรา/เป้าไม่เจอ แตะเองครั้งนี้", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        autoTargets = r.enemies;
+                        float[] t = r.enemies.get(0);
+                        pick.autoDone(fwF, r.sx, r.sy, t[0], t[1]);
+                    }
+                });
+            }
+        }).start();
+    }
 
     /** Which map is this, where is its minimap, and which ground is still standing (background thread). */
     private void matchMap(final Bitmap snap, final float fw, final int w, final int h) {
@@ -909,6 +968,13 @@ public class BubbleService extends Service implements Bridge.Host {
                         }
                     }
                     boolean cal = prefs.getFloat("mm" + w + "x" + h + "F", -1) > 0;
+                    List<float[]> tg = autoTargets;
+                    autoTargets = null;
+                    if (tg != null && tg.size() > 0) {
+                        StringBuilder sb = new StringBuilder("window.ddtTargets&&ddtTargets([");
+                        for (int i = 0; i < tg.size(); i++) sb.append(i > 0 ? "," : "").append("[").append(tg.get(i)[0]).append(",").append(tg.get(i)[1]).append("]");
+                        js += sb.append("]);").toString();
+                    }
                     js += "window.ddtMap&&ddtMap(" + (o == null ? "null" : o.toString()) + "," + cal + "," + org.json.JSONObject.quote(o == null ? MapMatch.diag : "") + ")";
                     WindRead.Result wr = WindRead.read(BubbleService.this, snap, w, h);
                     if (wr != null) js += ";window.ddtWind&&ddtWind(" + wr.whole + "," + wr.tenth + "," + wr.dir + "," + wr.conf + ")";

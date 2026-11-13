@@ -185,6 +185,9 @@ public class MainActivity extends Activity implements Bridge.Host {
     @Override
     public void miniText(String s) { }
 
+    @Override
+    public void setTarget(float x, float y) { }
+
     private boolean installing = false;
     private long installAt = 0;
 
