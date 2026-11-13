@@ -221,6 +221,16 @@ public class LivePick extends View {
 
     public Object lock() { return lock; }
 
+    /** Copy of the last clean frame (screen size), for the map matcher after the pick closes. */
+    public Bitmap copyFrame(int w, int h) {
+        synchronized (lock) {
+            if (frame == null || black) return null;
+            try {
+                return Bitmap.createBitmap(frame, 0, 0, Math.min(w, frame.getWidth()), Math.min(h, frame.getHeight()));
+            } catch (Throwable t) { return null; }
+        }
+    }
+
     public boolean wantsFrames() { return touching; }
 
     @Override

@@ -265,6 +265,32 @@ function sim(F,a,dir,w,tx,ty,keep,goff){
   return {best:best,bt:bt,bi:bi,pts:pts};
 }
 function solve(a,dir,w,tx,ty){var bp=0,bb=1e9,bt=0;for(var p=0;p<=100;p++){var s=sim(p*20,a,dir,w,tx,ty,false);if(s.best<bb){bb=s.best;bp=p;bt=s.bt}}return {p:bp,err:bb,t:bt}}
+/* ---------- สิ่งกีดขวาง ----------
+   แอปหาด่านจากมินิแมพ (แม่แบบพื้นจากไฟล์เกม 91 ด่าน) แล้วส่ง "พื้นที่ยังอยู่จริง" บนจอมา (พื้นที่โดนระเบิดหายไปแล้ว = อากาศ)
+   MAPD: {id,name,score,ox,oy,w,h (ช่วงบิตบนจอ), mox,moy,mw,mh (กรอบมินิแมพเต็ม), f, bits}
+   PK: จุดที่แตะ (px จอ) ตอนวัด + คีย์ของระยะ/ความสูง เพื่อรู้ว่าตัวเลขบนเครื่องคิดเลขยังเป็นของการวัดนั้น */
+var MAPD=null,PK=lsGet("ddt_pk",null);
+function mapLoad(o){MAPD=null;if(!o||!o.bits)return;try{var b=atob(o.bits),u=new Uint8Array(b.length);for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);o.u=u;MAPD=o}catch(e){}}
+mapLoad(lsGet("ddt_map",null));
+function pkKey(){return [S.dist,S.h,S.hSign,S.dir].join("|")}
+function wallOn(){return !!(MAPD&&PK&&PK.key===pkKey()&&PK.fw>3)}
+function solidAt(X,Y){var x=Math.round(X-MAPD.ox),y=Math.round(Y-MAPD.oy);if(x<0||y<0||x>=MAPD.w||y>=MAPD.h)return false;var i=y*MAPD.w+x;return (MAPD.u[i>>3]>>(i&7)&1)===1}
+/* ไล่ตามแนวกระสุน (ทุก ~1.5 px บนจอ) จนถึงจุดใกล้เป้าที่สุด: คืน [x,y] (px สนามรบ) ที่ชนพื้น/ออกข้างแผนที่ หรือ null
+   ไม่นับ 30 px แรกจากตัวเรา และรอบเป้า 45 px (ระเบิดตกพื้นข้างเป้า = ยังโดน) */
+function wallHit(F,a,dir,w,tx,ty,goff){
+  if(!wallOn())return null;
+  var t=sim(F,a,dir,w,tx,ty,true,goff),p=t.pts,q=PK.fw/1000,lift=8*MAPD.f,len=0,end=Math.min(t.bi+1,p.length-1);
+  var L=MAPD.mox,Rr=MAPD.mox+MAPD.mw;
+  for(var i=1;i<=end;i++){var x0=p[i-1][0],y0=p[i-1][1],dx=p[i][0]-x0,dy=p[i][1]-y0,seg=Math.hypot(dx,dy),n=Math.max(1,Math.ceil(seg*q/1.5));
+    for(var j=1;j<=n;j++){var x=x0+dx*j/n,y=y0+dy*j/n;len+=seg/n;if(len<30)continue;
+      if(Math.hypot(x-tx,y-ty)<45)return null;
+      var X=PK.sx+x*q,Y=PK.sy+lift-y*q;
+      if(X<L||X>Rr)return [x,y];          /* ออกข้างแผนที่ = กระสุนหาย */
+      if(solidAt(X,Y))return [x,y]}}
+  return null}
+window.ddtMap=function(o){PK=lsGet("ddt_pk",PK);mapLoad(o);try{if(o)lsSet("ddt_map",o);else localStorage.removeItem("ddt_map")}catch(e){}
+  HI.key="";render();
+  if(o)toast("ด่าน "+o.name+" · ตรวจสิ่งกีดขวางแล้ว",1800);else if(PK&&HUD)toast("ไม่รู้จักด่านนี้: ไม่ได้ตรวจสิ่งกีดขวาง",2200)};
 /* Auto: ไล่มุม 20–90 หาคู่ มุม/แรง ที่โดนแน่นอน
    "แน่นอน" = แรงที่บอกตกห่างเป้า ≤20 px และแรงต่ำกว่า 1% (ช่วงปล่อยหลอด) ยังตกในรัศมีระเบิด 55 px
    คืน 2 ตัวเลือก: แรงน้อยสุด (ทนมุมเพี้ยนสุด) + มุมสูงสุดที่โดน (ห่างกัน ≥8°) */
@@ -273,7 +299,10 @@ function autoPick(dir,w,tx,ty){
   var near=null;
   for(var a=(S.spread?12:20);a<=90;a++){var r=solveX(a,dir,w,tx,ty);   /* 3 นัด: หันขวารวมกันดีสุดที่มุมต่ำ ~18° */if(!near||r.err<near.r.err)near={a:a,r:r};if(r.err>TOL())continue;
     var e2=S.spread?(r.err<=40?0:99):(r.p>0?sim((r.p-1)*20,a,dir,w,tx,ty,false).best:r.err);all.push({a:a,r:r,sure:e2<=55})}
-  var pool=all.filter(function(x){return x.sure});if(!pool.length)pool=all;
+  if(wallOn())all.forEach(function(x){x.blk=!!wallHit(x.r.p*20,x.a,dir,w,tx,ty)});
+  /* เลือกจากทางที่ "โล่งและชัวร์" ก่อน → โล่ง → ชัวร์ → ทั้งหมด */
+  var pool=all.filter(function(x){return x.sure&&!x.blk});if(!pool.length)pool=all.filter(function(x){return !x.blk});
+  if(!pool.length)pool=all.filter(function(x){return x.sure});if(!pool.length)pool=all;
   /* 3 นัดแต่ไม่มีมุมที่โดนครบ: บอกมุมที่ใกล้ที่สุด พร้อมจำนวนนัดที่โดน */
   if(!pool.length){if(S.spread&&near&&near.r.errs){near.partial=near.r.errs.filter(function(e){return e<=55}).length;near.best=true;return [near]}return []}
   var o1=pool.reduce(function(m,x){return x.r.p<m.r.p||(x.r.p===m.r.p&&x.a>m.a)?x:m});
@@ -351,7 +380,7 @@ function render(){
     AU=has?autoPick(S.dir,wind,tx,ty):[];
     /* ปรับมุม (หลบสิ่งกีดขวาง): เลื่อนทั้ง 3 ทางไป aOff องศา แล้วหาแรงใหม่ ทางไหนไม่โดนแล้ว = miss (เส้นหาย) */
     if(S.aOff&&AU.length)AU=AU.map(function(x){var a=x.a+S.aOff,r=a>=5&&a<=90?solveX(a,S.dir,wind,tx,ty):null;
-      return {a:a,r:r||{p:0,err:1e9},base:x.a,best:x.best,sure:x.sure,miss:!r||r.err>TOL()}});
+      var miss=!r||r.err>TOL();return {a:a,r:r||{p:0,err:1e9},base:x.a,best:x.best,sure:x.sure,miss:miss,blk:!miss&&!!wallHit(r.p*20,a,S.dir,wind,tx,ty)}});
     angles=AU.map(function(x){return x.a});AU.forEach(function(x){res[x.a]=x.r});
     if(!angles.length){angles=[45];if(has)res[45]=solveX(45,S.dir,wind,tx,ty)}
     var bestA=(AU.filter(function(x){return x.best&&!x.miss})[0]||AU.filter(function(x){return !x.miss})[0]||{}).a;
@@ -392,9 +421,10 @@ function render(){
   var pw=$("rPow"),st=$("rStat");
   if(!has){LAST={has:false};if(HUD){hudRender();sendAim(null)}pw.textContent="—";pw.style.color="#fff";$("rSub").textContent="ใส่ระยะก่อน";st.textContent="";$("rPath").setAttribute("d","");mv("rS",-9,-9);mv("rT",-9,-9);return}
   var r=res[ang]||solveX(ang,FACE,wind,tx,ty),T=BAR[S.speed-1],hit=r.err<=TOL(),col=hit?"var(--green)":"var(--orange)";
+  var wh=hit?wallHit(r.p*20,ang,FACE,wind,tx,ty):null,blk=!!wh;if(blk)col="var(--red,#FF453A)";
   if(AU&&AU.length){var ai=AU.map(function(x){return x.a}).indexOf(ang);if(ai>=0)col=AUTO_COL[ai]}
   $("rPath").setAttribute("stroke",AU&&AU.length?col:"#0A84FF");
-  pw.textContent=r.p+"%";pw.style.color=col;st.textContent=hit?"โดน":"ไม่ถึง ลองมุมอื่น";st.style.color=col;
+  pw.textContent=r.p+"%";pw.style.color=col;st.textContent=blk?"ชนสิ่งกีดขวาง":hit?"โดน":"ไม่ถึง ลองมุมอื่น";st.style.color=col;
   $("rSub").innerHTML='<b style="color:#fff;font-size:12px">มุม '+ang+'°'+(back?' · หันหนีเป้า':'')+'</b>'+(S.mode==="high"?' <span style="font-size:10px">('+HI.wTxt+')</span>':'')+'<br><span style="color:'+col+'">'+(hit?"โดน":"ไม่ถึง")+'</span> · ห่าง '+Math.round(r.err)+" px<br>ปล่อยหลอด "+(Math.max(0,r.p-1)/100*T).toFixed(2)+"–"+(r.p/100*T).toFixed(2)+" วิ";
   var tr=sim(r.p*20,ang,FACE,wind,tx,ty,true),pts=tr.pts.slice(0,tr.bi+2);
   var xs=pts.map(function(p){return p[0]}).concat([0,tx]),ys=pts.map(function(p){return p[1]}).concat([0,ty]);
@@ -404,10 +434,10 @@ function render(){
   $("rPath").setAttribute("d",pts.map(function(p,i){return (i?"L":"M")+X(p[0])+" "+Y(p[1])}).join(" "));
   mv("rS",X(0),Y(0));mv("rT",X(tx),Y(ty));
   if(!hit&&S.mode!=="auto"&&HUD){var ap=autoPick(S.dir,wind,tx,ty);LAST_HINT=ap.length?(ap.filter(function(x){return x.best})[0]||ap[0]):null}else LAST_HINT=null;
-  LAST={has:true,ang:ang,p:r.p,hit:hit,err:r.err,back:back,auto:AU,hint:LAST_HINT,other:low?LOWS.filter(function(a){return a!==LA&&res[a]}).map(function(a){return {a:a,r:res[a]}}):null};if(HUD){hudRender();
+  LAST={has:true,ang:ang,p:r.p,hit:hit,blk:blk,err:r.err,back:back,auto:AU,hint:LAST_HINT,other:low?LOWS.filter(function(a){return a!==LA&&res[a]}).map(function(a){return {a:a,r:res[a]}}):null};if(HUD){hudRender();
     var shots;
-    if(AU&&AU.length)shots=AU.map(function(x,i){if(x.miss)return null;var t=sim(x.r.p*20,x.a,S.dir,wind,tx,ty,true);return {p:x.r.p,a:x.a,col:AUTO_COL[i],pts:t.pts.slice(0,t.bi+2)}}).filter(Boolean);
-    else shots=[{p:r.p,a:ang,col:hit?"#30D158":"#FF9F0A",pts:pts}];
+    if(AU&&AU.length)shots=AU.map(function(x,i){if(x.miss)return null;var t=sim(x.r.p*20,x.a,S.dir,wind,tx,ty,true);return {p:x.r.p,a:x.a,col:AUTO_COL[i],pts:t.pts.slice(0,t.bi+2),hit:x.blk?wallHit(x.r.p*20,x.a,S.dir,wind,tx,ty):null}}).filter(Boolean);
+    else shots=[{p:r.p,a:ang,col:hit?"#30D158":"#FF9F0A",pts:pts,hit:wh}];
     if(S.spread){   /* นัดข้าง 2 เส้นบาง (ไม่มีขีดบนหลอด) ของทุกตัวเลือก */
       shots.slice().forEach(function(sh){[[0.9,-5],[1.1,5]].forEach(function(k){
         var t=sim(sh.p*20*k[0],sh.a,S.dir,wind,tx,ty,true,k[1]);shots.push({p:-1,a:sh.a,col:sh.col,pts:t.pts.slice(0,t.bi+2)})})})}
@@ -574,6 +604,7 @@ window.ddtPickDone=function(fw,sx,sy,tx,ty,sw){
   if(!(fw>3))return;M.fwr=fw/sw;lsSet("ddt_fwr",M.fwr);
   var k=1000/fw,dx=(tx-sx)*k,dy=(sy-ty)*k;
   S.dist=(Math.abs(dx)/100).toFixed(1);S.dir=dx>=0?1:-1;S.h=String(Math.round(Math.abs(dy)));S.hSign=dy>=0?1:-1;S.field="dist";S.aOff=0;
+  PK={fw:fw,sx:sx,sy:sy,key:pkKey()};lsSet("ddt_pk",PK);
   setTab("calc");render();
   toast("ระยะ "+S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · ต่างระดับ "+(S.hSign>0?"+":"−")+S.h+" px",2600);
 };
@@ -588,7 +619,7 @@ function slim(src){var step=Math.max(1,Math.ceil(src.length/40)),out=[];
 function sendAim(a){
   if(!HOST||!HOST.showAim)return;
   if(!a){HOST.showAim("");return}
-  HOST.showAim(JSON.stringify({t:a.t,shots:a.shots.map(function(x){return {p:x.p,col:x.col,a:x.a,pts:slim(x.pts||[])}})}));
+  HOST.showAim(JSON.stringify({t:a.t,shots:a.shots.map(function(x){var o={p:x.p,col:x.col,a:x.a,pts:slim(x.pts||[])};if(x.hit)o.hit=[Math.round(x.hit[0]),Math.round(x.hit[1])];return o})}));
 }
 /* ปุ่มปรับมุม Auto: −5 −1 [ค่าปรับ/รีเซ็ต] +1 +5 */
 var HUD_H=0;
@@ -613,10 +644,10 @@ function hudRender(){
   else{
     if(LAST.auto){big.style.color="var(--orange)";big.style.fontSize=LAST.auto.length>2?"17px":"";
       if(LAST.auto.length&&LAST.auto[0].partial!=null){big.textContent=LAST.auto[0].a+"° "+LAST.auto[0].r.p+"% (โดน "+LAST.auto[0].partial+"/3)";big.style.fontSize=""}
-      else if(LAST.auto.length)big.innerHTML=LAST.auto.map(function(x,i){return x.miss?'<em style="font-style:normal;color:#8E8E93">✕</em>':'<em style="font-style:normal;color:'+AUTO_COL[i]+'">'+x.a+"° "+x.r.p+'%</em>'}).join('<em style="font-style:normal;color:var(--l3)">'+(LAST.auto.length>2?" · ":" / ")+'</em>');
+      else if(LAST.auto.length)big.innerHTML=LAST.auto.map(function(x,i){return x.miss?'<em style="font-style:normal;color:#8E8E93">✕</em>':'<em style="font-style:normal;color:'+AUTO_COL[i]+'">'+x.a+"° "+x.r.p+'%'+(x.blk?'<b style="color:#FF453A;font-size:12px"> ชน</b>':'')+'</em>'}).join('<em style="font-style:normal;color:var(--l3)">'+(LAST.auto.length>2?" · ":" / ")+'</em>');
       else big.textContent="ไม่มีมุมที่โดน"}
-    else{big.style.fontSize="";big.textContent=LAST.ang+"° · "+LAST.p+"%";big.style.color=LAST.hit?"var(--green)":"var(--orange)"}
-    sub.textContent=S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px · ลม "+(S.wDir>0?"→":"←")+S.wInt+"."+S.wDec+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(S.spread?" · 3 นัด":"")+(LAST.hit?"":LAST.hint?" · ลอง Auto "+LAST.hint.a+"° "+LAST.hint.r.p+"%":" · ไม่มีมุมที่โดน")+(LAST.auto&&LAST.auto.length&&!LAST.auto[0].sure?" · ไม่ชัวร์ เป้าแคบ":"")+(S.mode==="auto"&&S.aOff?" · ปรับมุม "+(S.aOff>0?"+":"−")+Math.abs(S.aOff)+"°"+(LAST.auto&&LAST.auto.length&&LAST.auto.every(function(x){return x.miss})?" ไม่โดนทั้ง 3":""):"")}
+    else{big.style.fontSize="";big.textContent=LAST.ang+"° · "+LAST.p+"%"+(LAST.blk?" ชน":"");big.style.color=LAST.blk?"#FF453A":LAST.hit?"var(--green)":"var(--orange)"}
+    sub.textContent=S.dist+" ช่อง "+(S.dir>0?"→":"←")+" · "+(S.hSign<0?"−":"+")+(S.h||"0")+" px · ลม "+(S.wDir>0?"→":"←")+S.wInt+"."+S.wDec+(LAST.back?" · หันหนีเป้า":"")+(S.mode==="high"&&HI.wTxt?" · "+HI.wTxt:"")+(S.spread?" · 3 นัด":"")+(LAST.hit?"":LAST.hint?" · ลอง Auto "+LAST.hint.a+"° "+LAST.hint.r.p+"%":" · ไม่มีมุมที่โดน")+(LAST.auto&&LAST.auto.length&&!LAST.auto[0].sure?" · ไม่ชัวร์ เป้าแคบ":"")+(LAST.blk?" · ชนสิ่งกีดขวาง ลอง Auto":"")+(LAST.auto&&LAST.auto.length&&LAST.auto.every(function(x){return x.blk||x.miss})&&wallOn()?" · ทุกทางติดสิ่งกีดขวาง":"")+(wallOn()?" · ด่าน "+MAPD.name:"")+(S.mode==="auto"&&S.aOff?" · ปรับมุม "+(S.aOff>0?"+":"−")+Math.abs(S.aOff)+"°"+(LAST.auto&&LAST.auto.length&&LAST.auto.every(function(x){return x.miss})?" ไม่โดนทั้ง 3":""):"")}
   /* แถวโหมดเรียงตามมุม: 30 · 50 · 65 · สูง 95 · กลับหัว — โชว์แรงของแต่ละมุมล็อกด้วย */
   var oth={};(LAST.has&&LAST.other||[]).forEach(function(o){oth[o.a]=o.r.p});if(LAST.has&&S.mode==="low")oth[LAST.ang]=LAST.p;
   var cur=S.mode==="auto"?"A":S.mode==="low"?"L"+S.lowA:S.mode==="high"?(S.back?"B":"H"):"";
@@ -631,7 +662,7 @@ function hudRender(){
   $("hW2").innerHTML=[0,1,2,3,4,5,6,7,8,9].map(function(n){return '<button class="hk'+(n===S.wDec?" on":"")+'" data-wd="'+n+'">.'+n+'</button>'}).join("");
 }
 function applyHa(){var v=lsGet("ddt_ha",35);$("hud").style.setProperty("--ha",v/100)}
-window.ddtReload=function(){applyHa();S=Object.assign(S,lsGet("ddt_state",{}));S.field="dist";M.fwr=lsGet("ddt_fwr",0);HI.key="";render()};
+window.ddtReload=function(){applyHa();S=Object.assign(S,lsGet("ddt_state",{}));PK=lsGet("ddt_pk",null);mapLoad(lsGet("ddt_map",null));S.field="dist";M.fwr=lsGet("ddt_fwr",0);HI.key="";render()};
 if(HUD){document.documentElement.classList.add("hud");document.body.classList.add("hud");applyHa();
   document.addEventListener("click",function(e){var b=e.target.closest("[data-hd]");if(b){S.wDir=+b.dataset.hd;render()}});
   $("hRes").onclick=function(){if(HOST&&HOST.openPanel)HOST.openPanel()};

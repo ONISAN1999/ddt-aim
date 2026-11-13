@@ -221,6 +221,7 @@ public class BubbleService extends Service implements Bridge.Host {
         running = true;
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         prefs = getSharedPreferences("ddt", MODE_PRIVATE);
+        new Thread(new Runnable() { public void run() { MapMatch.load(BubbleService.this); } }).start();   // warm the map templates
         try {
             addAim();
             addHud();
@@ -469,7 +470,10 @@ public class BubbleService extends Service implements Bridge.Host {
                 }
                 int col;
                 try { col = android.graphics.Color.parseColor(sh.optString("col", "#30D158")); } catch (Exception e) { col = 0xFF30D158; }
-                list.add(new AimOverlay.Shot(sh.getInt("p"), sh.optInt("a"), col, path));
+                AimOverlay.Shot so = new AimOverlay.Shot(sh.getInt("p"), sh.optInt("a"), col, path);
+                org.json.JSONArray wl = sh.optJSONArray("hit");
+                if (onMap && wl != null) so.wall = new float[]{sx + (float) wl.getDouble(0) * k, sy - (float) wl.getDouble(1) * k};
+                list.add(so);
             }
             aim.setShots(list, onMap ? lastPick[3] : -1, onMap ? lastPick[4] : -1);
         } catch (Throwable e) {
@@ -787,7 +791,9 @@ public class BubbleService extends Service implements Bridge.Host {
                     if (aim != null) aim.setBar(bar[0], bar[1], bar[2]);
                 }
                 lastPick = new float[]{fw, sx, sy, tx, ty};
+                final Bitmap snap = pick != null ? pick.copyFrame(w, h) : null;
                 endPick("ddtPickDone(" + fw + "," + sx + "," + sy + "," + tx + "," + ty + "," + sw + ")");
+                if (snap != null) matchMap(snap, fw, w, h);
             }
             public void cancel() { endPick(null); }
             public void reauth() {
@@ -853,6 +859,38 @@ public class BubbleService extends Service implements Bridge.Host {
         if (reader != null) { try { reader.close(); } catch (Exception ignored) { } reader = null; }
         if (capThread != null) { capThread.quitSafely(); capThread = null; }
         bufs = new Bitmap[2];
+    }
+
+    private String lastMapId;
+
+    /** Which map is this, where is its minimap, and which ground is still standing (background thread). */
+    private void matchMap(final Bitmap snap, final float fw, final int w, final int h) {
+        new Thread(new Runnable() {
+            public void run() {
+                String js;
+                try {
+                    MapMatch.load(BubbleService.this);
+                    int rx0 = (int) (w * 0.55f), sw = w - rx0, sh = (int) (h * 0.5f);
+                    int[] scr = new int[sw * sh];
+                    snap.getPixels(scr, 0, sw, rx0, 0, sw, sh);
+                    MapMatch.Hit hit = MapMatch.find(prefs, "mm" + w + "x" + h, lastMapId, scr, sw, sh, rx0, 0, fw);
+                    org.json.JSONObject o = hit == null ? null : MapMatch.build(BubbleService.this, hit, snap, w, h);
+                    if (o != null) lastMapId = hit.t.id;
+                    js = "window.ddtMap&&ddtMap(" + (o == null ? "null" : o.toString()) + ")";
+                } catch (Throwable t) {
+                    CrashLog.note("matchMap", t);
+                    js = "window.ddtMap&&ddtMap(null)";
+                }
+                snap.recycle();
+                final String code = js;
+                ui.post(new Runnable() {
+                    public void run() {
+                        Updater.js(hudWeb, code);
+                        Updater.js(panelWeb, code);
+                    }
+                });
+            }
+        }).start();
     }
 
     private void endPick(String js) {

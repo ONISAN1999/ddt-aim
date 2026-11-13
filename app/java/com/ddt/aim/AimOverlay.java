@@ -21,6 +21,7 @@ public class AimOverlay extends View {
     public static class Shot {
         final int power, angle, color;
         final float[] path;           // x0,y0,x1,y1,... screen px, or null
+        float[] wall;                 // where it hits ground/leaves the map before the target (screen px), or null
         public Shot(int power, int angle, int color, float[] path) {
             this.power = power; this.angle = angle; this.color = color; this.path = path;
         }
@@ -77,7 +78,16 @@ public class AimOverlay extends View {
             c.drawPath(p, line);
             line.setColor(s.color);
             line.setStrokeWidth(s.power < 0 ? 1.2f * d : 2f * d);   // side shots of a 3-shot spread: thin
+            if (s.wall != null) line.setPathEffect(new android.graphics.DashPathEffect(new float[]{5 * d, 4 * d}, 0));
             c.drawPath(p, line);
+            line.setPathEffect(null);
+            if (s.wall != null) {            // blocked: red X where the shell meets the ground
+                float wx = s.wall[0] - ox, wy = s.wall[1] - oy, r = 4.5f * d;
+                line.setColor(0xE6000000); line.setStrokeWidth(4.5f * d);
+                c.drawLine(wx - r, wy - r, wx + r, wy + r, line); c.drawLine(wx - r, wy + r, wx + r, wy - r, line);
+                line.setColor(0xFFFF453A); line.setStrokeWidth(2.5f * d);
+                c.drawLine(wx - r, wy - r, wx + r, wy + r, line); c.drawLine(wx - r, wy + r, wx + r, wy - r, line);
+            }
         }
         if (anyPath && tx >= 0) {
             line.setColor(0xFFFFFFFF);
