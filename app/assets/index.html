@@ -79,6 +79,9 @@ button:active{filter:brightness(1.35)}
 /* overlays */
 .ov{position:absolute;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:5}
 .ov.on{display:flex}
+body.setonly .hdr .seg,body.setonly .view,body.setonly #ubar{display:none!important}
+body.setonly #ovSet{position:absolute;inset:0;background:var(--bg,#000);display:flex;align-items:flex-start;overflow:auto;padding:12px 0}
+body.setonly #ovSet .set{margin:auto}
 .sheet{width:380px;background:rgba(44,44,46,.98);border-radius:18px;padding:18px 18px 14px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.6)}
 .notes{background:var(--g1);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.6;color:#EBEBF5;white-space:pre-line;max-height:110px;overflow:auto}
 .bar{height:6px;border-radius:3px;background:var(--g3);overflow:hidden}.bar div{height:6px;background:var(--blue);width:0}
@@ -134,7 +137,6 @@ body.hud #hud{display:flex}
       <div class="card res">
         <div class="row"><div class="mseg"><button id="mAuto" aria-label="Auto: หามุมและแรงที่โดนให้เอง">Auto</button><button id="mPick">เลือก</button><button id="mLow" aria-label="มุมล็อก แตะซ้ำเพื่อสลับ 30 50 65 องศา">ล็อก</button><button id="mHigh" aria-label="มุมสูง แตะซ้ำเพื่อเปลี่ยนแรงหลัก">สูง</button><button id="mBack" aria-label="กลับหัว: หันหนีเป้า มุมเกิน 90 องศา">กลับหัว</button></div><span id="rStat" style="display:none"></span></div>
         <div class="row" id="aoRow" style="display:none"><div class="mseg" id="aoSeg"></div></div>
-        <div class="row" id="otRow" style="display:none"><div class="mseg"><button id="otBtn" aria-pressed="false">วัดแตะเดียว: ปิด</button></div><span style="font-size:11px;color:var(--l2);margin-left:6px">แตะลูกบอลครั้งเดียว แอปหาตัวเรา+เป้าใกล้สุดเอง</span></div>
         <div style="display:flex;align-items:baseline;gap:10px"><span class="pw" id="rPow">—</span><span class="sub" id="rSub">ใส่ระยะก่อน</span></div>
         <svg width="222" height="54" viewBox="0 0 222 62" preserveAspectRatio="none" aria-hidden="true" style="margin-top:2px"><line x1="0" y1="61" x2="222" y2="61" stroke="#3A3A3C"/><path id="rPath" d="" fill="none" stroke="#0A84FF" stroke-width="2" stroke-dasharray="4 3"/><circle id="rS" r="4" fill="#5AC8FA" cx="-9" cy="-9"/><circle id="rT" r="5" fill="none" stroke="#FF9F0A" stroke-width="2" cx="-9" cy="-9"/></svg>
       </div>
@@ -206,6 +208,9 @@ body.hud #hud{display:flex}
         </div>
         <div class="srow"><span>ตรวจอัปเดตตอนเปิดแอป</span><button class="sw on" id="sAuto" aria-label="ตรวจอัปเดตอัตโนมัติ"><span></span></button></div>
         <button class="link" id="sCheck">ตรวจหาเวอร์ชันใหม่</button>
+      </div>
+      <div class="list" id="sOneBox" style="display:none">
+        <div class="srow"><span>วัดแตะเดียว (แอปหาตัวเรา + เป้าเอง)</span><button class="sw" id="sOne" aria-label="วัดแตะเดียว"><span></span></button></div>
       </div>
       <div class="list">
         <div class="srow" id="sHaRow" style="display:none;gap:12px"><span style="white-space:nowrap">ความทึบปุ่มแถบผล</span><input type="range" id="sHa" min="10" max="90" step="5" style="flex:1;accent-color:#0A84FF"><b id="sHaV" style="width:40px;text-align:right;font-size:13px"></b></div>
@@ -554,7 +559,7 @@ $("fileIn").addEventListener("change",function(){var f=this.files&&this.files[0]
 var tab="calc";
 function setTab(t){tab=t;$("tCalc").classList.toggle("on",t==="calc");$("tMap").classList.toggle("on",t==="map");$("vCalc").classList.toggle("on",t==="calc");$("vMap").classList.toggle("on",t==="map");if(t==="map")drawMap()}
 window.ddtBack=function(){
-  if($("ovSet").classList.contains("on")){$("ovSet").classList.remove("on");return true}
+  if($("ovSet").classList.contains("on")&&!document.body.classList.contains("setonly")){$("ovSet").classList.remove("on");return true}
   if($("ovUp").classList.contains("on")){if(U.phase!=="dl")closeUp();return true}
   if(tab==="map"){setTab("calc");return true}
   return false;
@@ -608,7 +613,7 @@ $("bUse").onclick=function(){var r=mapResult();if(!r){toast("วางจุด�
 $("bSet").onclick=function(){$("sVer").textContent="เวอร์ชัน "+curName();showErr();$("sAuto").classList.toggle("on",U.auto);$("ovSet").classList.add("on")};
 $("sClose").onclick=function(){$("ovSet").classList.remove("on")};
 $("sAuto").onclick=function(){U.auto=!U.auto;lsSet("ddt_auto",U.auto);this.classList.toggle("on",U.auto)};
-$("sCheck").onclick=function(){$("ovSet").classList.remove("on");checkUpdate(true)};
+$("sCheck").onclick=function(){if(!document.body.classList.contains("setonly"))$("ovSet").classList.remove("on");checkUpdate(true)};
 $("sFrame").onclick=function(){M.fwr=0;M.useMem=false;lsSet("ddt_fwr",0);toast("ล้างกรอบแล้ว ครั้งต่อไปให้แตะขอบซ้าย-ขวาของกรอบใหม่")};
 $("ubarB").onclick=openUp;
 $("uLater").onclick=function(){if(U.info)lsSet("ddt_skipver",+U.info.versionCode);closeUp()};
@@ -616,8 +621,12 @@ $("uGo").onclick=function(){if(!HOST)return;U.phase="dl";upView();HOST.downloadU
 $("uInst").onclick=function(){if(HOST)HOST.installUpdate()};
 $("uWeb").onclick=function(){var u=U.info&&U.info.apk||"https://github.com/ONISAN1999/ddt-aim/releases/latest/download/ddt-aim.apk";
   if(HOST&&HOST.openUrl){HOST.openUrl(u);toast("เปิดเบราว์เซอร์แล้ว: รอดาวน์โหลดเสร็จ แตะไฟล์แล้วกดติดตั้ง",5000)}else location.href=u};
-if(BUBBLE&&HOST&&HOST.setOneTap){$("otRow").style.display="";var otSet=function(v){$("otBtn").textContent="วัดแตะเดียว: "+(v?"เปิด":"ปิด");$("otBtn").classList.toggle("on",v);$("otBtn").setAttribute("aria-pressed",String(v))};
-  otSet(!!HOST.oneTap());$("otBtn").onclick=function(){var v=!HOST.oneTap();HOST.setOneTap(v);otSet(v);toast(v?"วัดแตะเดียว เปิด: แตะลูกบอลครั้งเดียวพอ":"วัดแตะเดียว ปิด: แตะตัวเรา → เป้า เอง",1800)}}
+if(BUBBLE&&HOST){document.body.classList.add("setonly");
+  /* แผงเต็มของ Bubble = หน้าตั้งค่าอย่างเดียว · ใช้งานจริงที่แถบผลลอย */
+  $("sClose").textContent="ปิด";$("sClose").onclick=function(){if(HOST.close)HOST.close()};
+  if(HOST.setOneTap){$("sOneBox").style.display="";var otSet=function(v){$("sOne").classList.toggle("on",v)};otSet(!!HOST.oneTap());
+    $("sOne").onclick=function(){var v=!HOST.oneTap();HOST.setOneTap(v);otSet(v);toast(v?"วัดแตะเดียว เปิด: แตะลูกบอลครั้งเดียวพอ":"วัดแตะเดียว ปิด: แตะตัวเรา → เป้า เอง",1800)}}
+  setTimeout(function(){$("bSet").onclick()},0)}
 if(BUBBLE){document.body.classList.add("bubble");$("bClose").style.display="flex";if(HOST)$("bClose").style.visibility="hidden";$("bClose").onclick=function(){if(HOST&&HOST.close)HOST.close()};$("bShot2").textContent="จับภาพจอสด"}
 else{$("mEmptyT").textContent="เลือกรูปแคปหน้าจอเกม หรือเปิด Bubble แล้วกดแคปจอระหว่างเล่น";$("bShot2").textContent="เลือกรูป";$("bShot").textContent="เลือกรูป";
   if(HOST&&HOST.toggleBubble){$("bBubble").style.display="flex";$("bBubble").onclick=function(){HOST.toggleBubble()}}}
