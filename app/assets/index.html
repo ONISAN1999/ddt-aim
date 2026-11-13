@@ -621,9 +621,13 @@ $("uGo").onclick=function(){if(!HOST)return;U.phase="dl";upView();HOST.downloadU
 $("uInst").onclick=function(){if(HOST)HOST.installUpdate()};
 $("uWeb").onclick=function(){var u=U.info&&U.info.apk||"https://github.com/ONISAN1999/ddt-aim/releases/latest/download/ddt-aim.apk";
   if(HOST&&HOST.openUrl){HOST.openUrl(u);toast("เปิดเบราว์เซอร์แล้ว: รอดาวน์โหลดเสร็จ แตะไฟล์แล้วกดติดตั้ง",5000)}else location.href=u};
-if(BUBBLE&&HOST){document.body.classList.add("setonly");
-  /* แผงเต็มของ Bubble = หน้าตั้งค่าอย่างเดียว · ใช้งานจริงที่แถบผลลอย */
-  $("sClose").textContent="ปิด";$("sClose").onclick=function(){if(HOST.close)HOST.close()};
+if(!HUD&&HOST){document.body.classList.add("setonly");
+  /* หน้าแอปและแผงเต็มของ Bubble = หน้าตั้งค่าอย่างเดียว · ใช้งานจริงที่แถบผลลอยของ Bubble */
+  if(BUBBLE){$("sClose").textContent="ปิด";$("sClose").onclick=function(){if(HOST.close)HOST.close()}}
+  else{$("sClose").textContent="เปิด / ปิด Bubble";$("sClose").classList.add("pri");$("sClose").style.width="220px";$("sClose").style.alignSelf="center";
+    $("sClose").onclick=function(){if(HOST.toggleBubble)HOST.toggleBubble()};
+    var st=$("sClose").parentNode;st.insertBefore($("sClose"),st.firstChild);$("sClose").style.height="48px";$("sClose").style.width="100%"}
+  $("sHaRow").style.display="flex";var hv0=lsGet("ddt_ha",35);$("sHa").value=hv0;$("sHaV").textContent=hv0+"%";
   if(HOST.setOneTap){$("sOneBox").style.display="";var otSet=function(v){$("sOne").classList.toggle("on",v)};otSet(!!HOST.oneTap());
     $("sOne").onclick=function(){var v=!HOST.oneTap();HOST.setOneTap(v);otSet(v);toast(v?"วัดแตะเดียว เปิด: แตะลูกบอลครั้งเดียวพอ":"วัดแตะเดียว ปิด: แตะตัวเรา → เป้า เอง",1800)}}
   setTimeout(function(){$("bSet").onclick()},0)}
@@ -632,7 +636,7 @@ else{$("mEmptyT").textContent="เลือกรูปแคปหน้าจ�
   if(HOST&&HOST.toggleBubble){$("bBubble").style.display="flex";$("bBubble").onclick=function(){HOST.toggleBubble()}}}
 function lastErr(){try{return HOST&&HOST.lastError?HOST.lastError():""}catch(e){return ""}}
 function showErr(){var t=lastErr();$("sErrBox").style.display=t?"block":"none";$("sErr").textContent=t}
-if(BUBBLE){$("sHaRow").style.display="flex";var hv=lsGet("ddt_ha",35);$("sHa").value=hv;$("sHaV").textContent=hv+"%";
+if(!HUD){$("sHaRow").style.display="flex";var hv=lsGet("ddt_ha",35);$("sHa").value=hv;$("sHaV").textContent=hv+"%";
   $("sHa").oninput=function(){lsSet("ddt_ha",+this.value);$("sHaV").textContent=this.value+"%"}}
 if(BUBBLE&&HOST&&HOST.resetBar){$("sBar").style.display="block";$("sBar").onclick=function(){HOST.resetBar()}}
 $("sSp").classList.toggle("on",!!S.spread);$("sSp").onclick=function(){S.spread=!S.spread;this.classList.toggle("on",S.spread);HI.key="";render()};
