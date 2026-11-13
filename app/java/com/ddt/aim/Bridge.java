@@ -108,6 +108,13 @@ public class Bridge {
         if (host != null) onUi(new Runnable() { public void run() { host.hudHeight(dp); } });
     }
 
+    /** Measure again by hand this once (one-tap measuring picked the wrong thing). */
+    @JavascriptInterface
+    public void pickManual() {
+        try { ctx.getSharedPreferences("ddt", 0).edit().putBoolean("manualOnce", true).apply(); } catch (Exception ignored) { }
+        if (host != null) onUi(new Runnable() { public void run() { host.pickLive(-1); } });
+    }
+
     @JavascriptInterface
     public void setOneTap(boolean on) {
         try { ctx.getSharedPreferences("ddt", 0).edit().putBoolean("onetap", on).apply(); } catch (Exception ignored) { }

@@ -517,7 +517,7 @@ public class BubbleService extends Service implements Bridge.Host {
             public void resetBar() { doResetBar(); }
             public void hudHeight(int h) { setHudHeight(h); }
             public void miniText(String s) { setMiniText(s); }
-            public void setTarget(float x, float y) { if (lastPick != null) { lastPick[3] = x; lastPick[4] = y; } }
+            public void setTarget(float x, float y) { pickTarget(x, y); }
         }), "DDT");
         hudWeb.setWebViewClient(new WebViewClient() {
             @Override
@@ -748,7 +748,14 @@ public class BubbleService extends Service implements Bridge.Host {
     public void miniText(String s) { setMiniText(s); }
 
     @Override
-    public void setTarget(float x, float y) { if (lastPick != null) { lastPick[3] = x; lastPick[4] = y; } }
+    public void setTarget(float x, float y) { pickTarget(x, y); }
+
+    private List<float[]> shownTargets;
+
+    private void pickTarget(float x, float y) {
+        if (lastPick != null) { lastPick[3] = x; lastPick[4] = y; }
+        if (aim != null) aim.setTargets(shownTargets, x, y);
+    }
 
     /** The overlay cannot rotate the screen: hand the install to the main screen, which turns portrait. */
     private void installViaMain() {
@@ -804,8 +811,11 @@ public class BubbleService extends Service implements Bridge.Host {
             return;
         }
         pickToHud = toHud;
-        autoTry = toHud && prefs.getBoolean("onetap", false);
+        autoTry = toHud && prefs.getBoolean("onetap", false) && !prefs.getBoolean("manualOnce", false);
+        prefs.edit().putBoolean("manualOnce", false).apply();
         autoTargets = null;
+        shownTargets = null;
+        if (aim != null) aim.setTargets(null, 0, 0);
         pick = new LivePick(this, fwr, w, aim == null || !aim.hasBar(), new LivePick.Cb() {
             public void done(float fw, float sx, float sy, float tx, float ty, int sw, float[] bar) {
                 if (sw > 0 && fw > 3) prefs.edit().putFloat("fwr", fw / sw).apply();
@@ -971,6 +981,11 @@ public class BubbleService extends Service implements Bridge.Host {
                     List<float[]> tg = autoTargets;
                     autoTargets = null;
                     if (tg != null && tg.size() > 0) {
+                        final List<float[]> tgl = tg;
+                        ui.post(new Runnable() { public void run() {
+                            shownTargets = tgl.size() > 1 ? tgl : null;
+                            if (aim != null && lastPick != null) aim.setTargets(shownTargets, lastPick[3], lastPick[4]);
+                        } });
                         StringBuilder sb = new StringBuilder("window.ddtTargets&&ddtTargets([");
                         for (int i = 0; i < tg.size(); i++) sb.append(i > 0 ? "," : "").append("[").append(tg.get(i)[0]).append(",").append(tg.get(i)[1]).append("]");
                         js += sb.append("]);").toString();

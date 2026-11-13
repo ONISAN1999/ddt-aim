@@ -226,6 +226,7 @@ body.hud #hud{display:flex}
 <div id="hud">
   <div class="hr1">
     <button class="hres" id="hRes" aria-label="เปิดแผงเต็ม"><b id="hBig">—</b><span id="hSub">แตะลูกบอล แล้วแตะ ตัวเรา → เป้า</span></button>
+    <button class="hb" id="hRf" aria-label="วัดใหม่ (กดค้าง = แตะเอง)" style="display:none">↻</button>
     <button class="hb" id="hTg" aria-label="เปลี่ยนเป้า" style="display:none">เป้า</button>
     <button class="hb" id="hSp" aria-label="ยิงกระจาย 3 นัด" aria-pressed="false">3 นัด</button>
     <button class="hb" id="hX" aria-label="ซ่อนแถบผล">✕</button>
@@ -682,6 +683,7 @@ function hudRender(){
   $("hM").innerHTML='<button class="hm'+(cur==="A"?" on":"")+'" data-hm="A">Auto</button>'+[30,50,65].map(function(a){var on=cur==="L"+a;return '<button class="hm'+(on?" on":"")+'" data-hm="L'+a+'">'+a+'°'+(oth[a]!=null?'<small>'+oth[a]+'%</small>':'')+'</button>'}).join("")+
     '<button class="hm'+(cur==="H"?" on":"")+'" data-hm="H">สูง '+(S.hiBase||95)+'</button><button class="hm'+(cur==="B"?" on":"")+'" data-hm="B">กลับหัว</button>';
   if(HOST&&HOST.miniText){var wt=(S.wInt||S.wDec)?(S.wDir>0?"→ ":"← ")+S.wInt+(S.wDec?"."+S.wDec:""):"0";if(wt!==hudRender.mt){hudRender.mt=wt;try{HOST.miniText(wt)}catch(e){}}}
+  $("hRf").style.display=HOST&&HOST.oneTap&&HOST.oneTap()?"":"none";
   var tgOn=PK&&PK.tg&&PK.tg.length>1&&PK.key===pkKey();$("hTg").style.display=tgOn?"":"none";if(tgOn)$("hTg").textContent="เป้า "+(PK.ti+1)+"/"+PK.tg.length;
   document.body.classList.toggle("auto",S.mode==="auto");
   $("hA").innerHTML=aoBtns("hk");
@@ -699,6 +701,12 @@ if(HUD){document.documentElement.classList.add("hud");document.body.classList.ad
   $("hX").onclick=function(){if(HOST&&HOST.close)HOST.close()};
   $("hSp").onclick=function(){S.spread=!S.spread;HI.key="";HI.sel=null;render()};
   $("hTg").onclick=function(){if(PK&&PK.tg)setTarget((PK.ti||0)+1)};
+  /* ↻ แตะ = วัดแตะเดียวใหม่ · กดค้าง = ครั้งนี้แตะเอง */
+  (function(){var b=$("hRf"),t=null,long=false;
+    b.addEventListener("pointerdown",function(){long=false;t=setTimeout(function(){long=true;toast("แตะเองครั้งนี้: แตะตัวเรา → เป้า",1600);try{HOST.pickManual()}catch(e){}},600)});
+    ["pointerup","pointercancel","pointerleave"].forEach(function(k){b.addEventListener(k,function(){clearTimeout(t)})});
+    b.addEventListener("click",function(){if(long)return;try{HOST.pickLive("0")}catch(e){}});
+    b.addEventListener("contextmenu",function(e){e.preventDefault()})})();
   document.addEventListener("click",function(e){var b=e.target.closest("[data-hm]");if(!b)return;var m=b.dataset.hm;
     if(m==="H"){if(S.mode==="high"&&!S.back)S.hiBase=S.hiBase===95?100:S.hiBase===100?90:95;S.mode="high";S.back=false}
     else if(m==="B"){S.mode="high";S.back=true}

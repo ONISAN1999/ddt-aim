@@ -59,6 +59,11 @@ public class AimOverlay extends View {
 
     public void clear() { shots = new ArrayList<>(); invalidate(); }
 
+    private List<float[]> targets;          // one-tap measuring: every enemy found (screen px), numbered
+    private float curX, curY;
+
+    public void setTargets(List<float[]> t, float cx, float cy) { targets = t; curX = cx; curY = cy; invalidate(); }
+
     @Override
     protected void onDraw(Canvas c) {
         getLocationOnScreen(loc);
@@ -97,6 +102,22 @@ public class AimOverlay extends View {
             line.setColor(0xFFFFFFFF);
             line.setStrokeWidth(1f * d);
             c.drawCircle(tx - ox, ty - oy, 5 * d, line);
+        }
+
+        // enemy numbers (matches the "เป้า n/N" button); the chosen one gets a filled badge
+        if (targets != null && targets.size() > 1) {
+            text.setTextSize(9 * d);
+            for (int i = 0; i < targets.size(); i++) {
+                float[] t = targets.get(i);
+                boolean cur = Math.abs(t[0] - curX) < 2 && Math.abs(t[1] - curY) < 2;
+                float bx = t[0] - ox + 9 * d, by = t[1] - oy - 9 * d;
+                fill.setColor(cur ? 0xFFFF453A : 0xCC000000);
+                c.drawCircle(bx, by, 6.5f * d, fill);
+                line.setColor(0xFFFFFFFF); line.setStrokeWidth(1 * d);
+                c.drawCircle(bx, by, 6.5f * d, line);
+                text.setColor(0xFFFFFFFF);
+                c.drawText(String.valueOf(i + 1), bx, by + 3.2f * d, text);
+            }
         }
 
         // ticks on the power bar; labels stacked when ticks sit close together
