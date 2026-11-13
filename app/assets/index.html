@@ -104,6 +104,7 @@ body.hud #hud{display:flex}
 .hm.on{background:rgba(10,132,255,calc(.35 + var(--ha)*.7));color:#fff}
 .hm small{display:block;font-size:10px;font-weight:500;opacity:.85;line-height:1}
 .hr2{grid-template-columns:repeat(8,minmax(0,1fr))}.hr3{grid-template-columns:repeat(10,minmax(0,1fr))}
+[data-ao]{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .hra{height:34px;display:none;grid-template-columns:1fr 1fr 1.9fr 1fr 1fr;gap:3px}body.auto .hra{display:grid}
 .hk{border-radius:8px;background:rgba(58,58,60,var(--ha));font-size:14px;font-weight:600;color:rgba(255,255,255,calc(.45 + var(--ha)*.6));text-shadow:0 0 2px rgba(0,0,0,.8)}
 .hk.on{background:rgba(10,132,255,calc(.35 + var(--ha)*.7));color:#fff}.hk.dir{font-size:20px;font-weight:800}.hk.dir.on{background:#64D2FF;color:#000;text-shadow:none;box-shadow:0 0 0 2px #fff inset}
@@ -595,8 +596,16 @@ function aoBtns(cls){var o=S.aOff|0;
   return '<button class="'+cls+'" data-ao="-5" aria-label="ลดมุม 5 องศา">«5</button><button class="'+cls+'" data-ao="-1" aria-label="ลดมุม 1 องศา">‹1</button>'+
     '<button class="'+cls+(o?" on":"")+'" data-ao="0" aria-label="รีเซ็ตการปรับมุม" style="font-size:12px">มุม '+(o>0?"+":o<0?"−":"±")+Math.abs(o)+'°'+(o?" ↺":"")+'</button>'+
     '<button class="'+cls+'" data-ao="1" aria-label="เพิ่มมุม 1 องศา">1›</button><button class="'+cls+'" data-ao="5" aria-label="เพิ่มมุม 5 องศา">5»</button>'}
-document.addEventListener("click",function(e){var b=e.target.closest("[data-ao]");if(!b)return;var v=+b.dataset.ao;
-  S.aOff=v===0?0:Math.max(-40,Math.min(40,(S.aOff|0)+v));render()});
+/* แตะ = ทีละขั้น · กดค้าง = ไหลต่อเนื่อง (เริ่มหลัง 350 ms, เร็วขึ้นหลัง 1.2 วิ) */
+var AO={t:null,v:0,n:0};
+function aoStep(v){var o=S.aOff|0,n=Math.max(-40,Math.min(40,o+v));if(n===o)return false;S.aOff=n;render();return true}
+function aoStop(){if(AO.t){clearTimeout(AO.t);AO.t=null}}
+function aoTick(){if(!aoStep(AO.v)){aoStop();return}AO.n++;AO.t=setTimeout(aoTick,AO.n>8?60:120)}
+document.addEventListener("pointerdown",function(e){var b=e.target.closest("[data-ao]");if(!b)return;var v=+b.dataset.ao;
+  e.preventDefault();aoStop();if(v===0){S.aOff=0;render();return}
+  AO.v=v;AO.n=0;aoStep(v);AO.t=setTimeout(aoTick,350)});
+["pointerup","pointercancel","blur"].forEach(function(k){(k==="blur"?window:document).addEventListener(k,aoStop)});
+document.addEventListener("contextmenu",function(e){if(e.target.closest("[data-ao]"))e.preventDefault()});
 function modeLabel(){return S.mode==="low"?"มุม "+S.lowA:S.mode!=="high"?"เลือกมุม "+S.angle+"°":S.back?"กลับหัว":"มุมสูง "+(S.hiBase||95)}
 function hudRender(){
   var big=$("hBig"),sub=$("hSub");
