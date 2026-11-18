@@ -479,6 +479,7 @@ public class BubbleService extends Service implements Bridge.Host {
                 int col;
                 try { col = android.graphics.Color.parseColor(sh.optString("col", "#30D158")); } catch (Exception e) { col = 0xFF30D158; }
                 AimOverlay.Shot so = new AimOverlay.Shot(sh.getInt("p"), sh.optInt("a"), col, path);
+                so.star = sh.optInt("star") == 1;
                 org.json.JSONArray wl = sh.optJSONArray("hit");
                 if (onMap && wl != null) so.wall = new float[]{sx + (float) wl.getDouble(0) * k, sy - (float) wl.getDouble(1) * k};
                 list.add(so);

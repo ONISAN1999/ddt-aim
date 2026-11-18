@@ -20,6 +20,7 @@ import java.util.List;
 public class AimOverlay extends View {
     public static class Shot {
         final int power, angle, color;
+        boolean star;                 // dig mode: the deepest of the three
         final float[] path;           // x0,y0,x1,y1,... screen px, or null
         float[] wall;                 // where it hits ground/leaves the map before the target (screen px), or null
         public Shot(int power, int angle, int color, float[] path) {
@@ -135,7 +136,7 @@ public class AimOverlay extends View {
             line.setStrokeWidth(3 * d);
             c.drawLine(x, y - h, x, y + h, line);
 
-            String lbl = s.angle + "° " + s.power + "%";   // always angle + power, every mode
+            String lbl = (s.star ? "★" : "") + s.angle + "° " + s.power + "%";   // always angle + power, every mode
             text.setTextSize(15 * d);
             float tw = text.measureText(lbl) + 14 * d;
             level = Math.abs(x - prevX) < tw + 4 * d ? level + 1 : 0;
