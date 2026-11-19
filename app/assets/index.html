@@ -214,6 +214,7 @@ body.hud #hud{display:flex}
       </div>
       <div class="list">
         <div class="srow" id="sHaRow" style="display:none;gap:12px"><span style="white-space:nowrap">ความทึบปุ่มแถบผล</span><input type="range" id="sHa" min="10" max="90" step="5" style="flex:1;accent-color:#0A84FF"><b id="sHaV" style="width:40px;text-align:right;font-size:13px"></b></div>
+        <div class="srow" id="sTkRow" style="gap:12px"><span style="white-space:nowrap">ความหนาขีดแรง</span><input type="range" id="sTk" min="0.5" max="4" step="0.5" style="flex:1;accent-color:#0A84FF" aria-label="ความหนาขีดแรงบนหลอด"><b id="sTkV" style="min-width:52px;text-align:right">1 dp</b></div>
         <button class="link" id="sFrame" style="color:#fff">ล้างกรอบแผนที่ที่จำไว้</button>
         <div class="srow" id="sSpRow"><span>ยิงกระจาย 3 นัด (โดนทั้ง 3)</span><button class="sw" id="sSp" aria-label="ยิงกระจาย 3 นัด"><span></span></button></div>
         <div class="srow" id="sCvRow"><span>3 นัด: รวมจุด (ขุดลึกสุด)</span><button class="sw" id="sCv" aria-label="3 นัด รวมจุด"><span></span></button></div>
@@ -666,6 +667,10 @@ function lastErr(){try{return HOST&&HOST.lastError?HOST.lastError():""}catch(e){
 function showErr(){var t=lastErr();$("sErrBox").style.display=t?"block":"none";$("sErr").textContent=t}
 if(!HUD){$("sHaRow").style.display="flex";var hv=lsGet("ddt_ha",35);$("sHa").value=hv;$("sHaV").textContent=hv+"%";
   $("sHa").oninput=function(){lsSet("ddt_ha",+this.value);$("sHaV").textContent=this.value+"%"}}
+/* ความหนาขีดแรงบนหลอด (dp) — Bubble อ่านค่าตอนวาดขีด */
+(function(){var v=HOST&&HOST.tickW?+HOST.tickW():1;if(!(v>0))v=1;$("sTk").value=v;$("sTkV").textContent=v+" dp";
+  if(!HOST||!HOST.setTickW)$("sTkRow").style.display="none";
+  $("sTk").oninput=function(){$("sTkV").textContent=this.value+" dp";try{HOST.setTickW(+this.value)}catch(e){}}})();
 if(BUBBLE&&HOST&&HOST.resetBar){$("sBar").style.display="block";$("sBar").onclick=function(){HOST.resetBar()}}
 $("sCv").classList.toggle("on",S.conv!==false);$("sCv").onclick=function(){S.conv=S.conv===false;this.classList.toggle("on",S.conv);HI.key="";save();render()};
 $("sSp").classList.toggle("on",!!S.spread);$("sSp").onclick=function(){S.spread=!S.spread;this.classList.toggle("on",S.spread);HI.key="";render()};

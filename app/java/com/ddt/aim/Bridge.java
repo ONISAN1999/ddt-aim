@@ -115,6 +115,17 @@ public class Bridge {
         if (host != null) onUi(new Runnable() { public void run() { host.pickLive(-1); } });
     }
 
+    /** Power-bar tick thickness in dp (setting). */
+    @JavascriptInterface
+    public void setTickW(float dp) {
+        try { ctx.getSharedPreferences("ddt", 0).edit().putFloat("tickW", Math.max(0.5f, Math.min(4f, dp))).apply(); } catch (Exception ignored) { }
+    }
+
+    @JavascriptInterface
+    public float tickW() {
+        try { return ctx.getSharedPreferences("ddt", 0).getFloat("tickW", 1f); } catch (Exception e) { return 1f; }
+    }
+
     @JavascriptInterface
     public void setOneTap(boolean on) {
         try { ctx.getSharedPreferences("ddt", 0).edit().putBoolean("onetap", on).apply(); } catch (Exception ignored) { }

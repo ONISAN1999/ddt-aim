@@ -124,17 +124,24 @@ public class AimOverlay extends View {
         // ticks on the power bar; labels stacked when ticks sit close together
         if (!hasBar()) return;
         float h = 16 * d, prevX = -1e9f;
+        float tw0 = getContext().getSharedPreferences("ddt", 0).getFloat("tickW", 1f);   // setting: tick thickness (dp)
         int level = 0;
         for (int k = 0; k < shots.size(); k++) {
             Shot s = shots.get(k);
             if (s.power < 0) continue;
             float x = barL + (barR - barL) * s.power / 100f - ox, y = barY - oy;
-            line.setColor(0xE6000000);
-            line.setStrokeWidth(6 * d);
+            // hairline tick for precise aiming (1 dp in the shot colour, thin dark edge), small arrowheads mark it
+            line.setColor(0xCC000000);
+            line.setStrokeWidth((tw0 + 1.2f) * d);
             c.drawLine(x, y - h, x, y + h, line);
             line.setColor(s.color);
-            line.setStrokeWidth(3 * d);
+            line.setStrokeWidth(tw0 * d);
             c.drawLine(x, y - h, x, y + h, line);
+            Path ah = new Path();
+            ah.moveTo(x - 3.5f * d, y - h - 5 * d); ah.lineTo(x + 3.5f * d, y - h - 5 * d); ah.lineTo(x, y - h); ah.close();
+            ah.moveTo(x - 3.5f * d, y + h + 5 * d); ah.lineTo(x + 3.5f * d, y + h + 5 * d); ah.lineTo(x, y + h); ah.close();
+            fill.setColor(s.color);
+            c.drawPath(ah, fill);
 
             String lbl = (s.star ? "★" : "") + s.angle + "° " + s.power + "%";   // always angle + power, every mode
             text.setTextSize(15 * d);
